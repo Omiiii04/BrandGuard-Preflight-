@@ -1,11 +1,170 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
+import DraftViewer from '../components/review/DraftViewer';
+import FindingsSidebar from '../components/review/FindingsSidebar';
+import ComparisonView from '../components/review/ComparisonView';
+import { getFindings, getDraft, patchFinding } from '../api/findings';
+import { MOCK_FINDINGS, MOCK_DRAFT } from '../utils/mockFindings';
+import './ReviewPage.css';
+
+const USE_MOCK = true;
 
 export default function ReviewPage() {
+  const { draftId } = useParams();
+  const [draft, setDraft] = useState(null);
+  const [findings, setFindings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
+  const [comparisonFinding, setComparisonFinding] = useState(null);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  function showToast(msg, type = 'success') {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, type });
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
+  }
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFetchError('');
+    try {
+      if (USE_MOCK) {
+        await new Promise((r) => setTimeout(r, 800));
+        setDraft(MOCK_DRAFT);
+        setFindings(MOCK_FINDINGS);
+      } else {
+        const [draftRes, findingsRes] = await Promise.all([
+          getDraft(draftId),
+          getFindings(draftId),
+        ]);
+        setDraft(draftRes.data);
+        setFindings(findingsRes.data);
+      }
+    } catch {
+      setFetchError('Failed to load review data. Please refresh.');
+    } finally {
+      setLoading(false);
+    }
+  }, [draftId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleAction({ findingId, action, editedFix }) {
+    try {
+      if (!USE_MOCK) {
+        await patchFinding(findingId, { action, editedFix });
+      }
+      setFindings((prev) =>
+        prev.map((f) =>
+          f._id === findingId ? { ...f, status: action } : f
+        )
+      );
+      showToast(`Finding ${action === 'accept' ? 'accepted' : action === 'dismiss' ? 'dismissed' : 'updated'}.`, 'success');
+    } catch {
+      showToast('Action failed. Please try again.', 'error');
+    }
+  }
+
+  function scrollToFinding(finding) {
+    const el = document.getElementById(`finding-${finding._id}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  const open = findings.filter((f) => f.status === 'open').length;
+
   return (
-    <AppLayout pageTitle="Review Draft">
-      <div className="empty-state">
-        <p>Review Page — coming in Block 3</p>
+    <AppLayout pageTitle={draft?.fileName ?? 'Review'}>
+      {fetchError && (
+        <div className="rp-banner rp-banner--error" role="alert">
+          {fetchError}
+        </div>
+      )}
+
+      <div className="rp-summary">
+        {!loading && (
+          <>
+            <span className="badge badge-status-inreview">{open} open</span>
+            <span className="badge badge-status-approved">
+              {findings.length - open} resolved
+            </span>
+            <span className="rp-total">{findings.length} total findings</span>
+          </>
+        )}
       </div>
+
+      <div className="rp-layout">
+        <section className="rp-draft-col card" aria-label="Draft text">
+          <h2 className="rp-col-heading">Draft</h2>
+          {loading ? (
+            <div className="loading-state">
+              <span className="spinner" aria-hidden="true" />
+            </div>
+          ) : (
+            <DraftViewer
+              content={draft?.content ?? ''}
+              findings={findings}
+              onHighlightClick={(f) => { scrollToFinding(f); setComparisonFinding(f); }}
+            />
+          )}
+        </section>
+
+        <section className="rp-findings-col" aria-label="Findings">
+          <h2 className="rp-col-heading">Findings</h2>
+          <FindingsSidebar
+            findings={findings}
+            loading={loading}
+            onAction={handleAction}
+          />
+        </section>
+
+        <aside className="rp-premortem-col card" aria-label="Pre-mortem panel">
+          <h2 className="rp-col-heading">Highest Risk Line</h2>
+          {!loading && findings.length > 0 ? (
+            <div className="rp-premortem">
+              <p className="rp-premortem-quote">
+                "{findings[0]?.draftSpan}"
+              </p>
+              <div className="rp-premortem-viewpoints">
+                {['Regulator', 'Journalist', 'Competitor', 'Screen-Reader'].map((v) => (
+                  <div key={v} className="rp-viewpoint">
+                    <span className="badge badge-status-draft rp-viewpoint-label">{v}</span>
+                    <span className="rp-viewpoint-reason">
+                      {v === 'Regulator' && 'Unverified comparative claim may breach advertising standards.'}
+                      {v === 'Journalist' && 'Unsupported superlative is headline-worthy.'}
+                      {v === 'Competitor' && 'Could trigger a counter-claim or legal challenge.'}
+                      {v === 'Screen-Reader' && 'Mark tag provides no accessible context for the highlighted claim.'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state" style={{ padding: 'var(--space-4)' }}>
+              <p>No risk data yet.</p>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <div className="rp-ai-notice" role="note">
+        This review used AI assistance. Findings are checked against your uploaded sources only.
+        Final decisions are made by you.
+      </div>
+
+      {comparisonFinding && (
+        <ComparisonView
+          finding={comparisonFinding}
+          onClose={() => setComparisonFinding(null)}
+        />
+      )}
+
+      {toast && (
+        <div className={`toast toast-${toast.type} rp-toast`} role="status" aria-live="polite">
+          {toast.msg}
+        </div>
+      )}
     </AppLayout>
   );
 }

@@ -1,0 +1,30 @@
+.dv-wrapper {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.dv-text {
+  font-size: var(--font-size-body);
+  line-height: 1.8;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dv-span {
+  border-radius: 3px;
+  padding: 1px 2px;
+  cursor: pointer;
+  font-style: normal;
+  transition: filter 0.1s ease;
+}
+
+.dv-span:hover {
+  filter: brightness(1.2);
+}
+
+.dv-span--supported    { background: rgba(45, 212, 163, 0.22);  color: var(--color-verdict-supported); }
+.dv-span--contradicted { background: rgba(244, 91, 105, 0.22);  color: var(--color-verdict-contradicted); }
+.dv-span--outdated     { background: rgba(245, 166, 35, 0.22);  color: var(--color-verdict-outdated); }
+.dv-span--notfound     { background: rgba(155, 163, 192, 0.18); color: var(--color-verdict-notfound); }
+.dv-span--unclear      { background: rgba(199, 125, 255, 0.18); color: var(--color-verdict-unclear); }

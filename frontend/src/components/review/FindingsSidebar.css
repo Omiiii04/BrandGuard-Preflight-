@@ -1,0 +1,10 @@
+.fs-loading,
+.fs-empty {
+  padding: var(--space-8);
+}
+
+.fs-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

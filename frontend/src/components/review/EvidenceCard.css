@@ -1,0 +1,90 @@
+.ec-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  scroll-margin-top: calc(var(--topbar-height) + var(--space-4));
+}
+
+.ec-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ec-counter {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.ec-verdict-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ec-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0 calc(var(--space-6) * -1);
+}
+
+.ec-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ec-section-label {
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.ec-draft-quote {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+.ec-span {
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  border-radius: 2px;
+  padding: 1px 3px;
+}
+
+.ec-span--supported     { background: rgba(45, 212, 163, 0.25); color: var(--color-verdict-supported); }
+.ec-span--contradicted  { background: rgba(244, 91, 105, 0.25); color: var(--color-verdict-contradicted); }
+.ec-span--outdated      { background: rgba(245, 166, 35, 0.25);  color: var(--color-verdict-outdated); }
+.ec-span--not-found     { background: rgba(155, 163, 192, 0.2);  color: var(--color-verdict-notfound); }
+.ec-span--unclear       { background: rgba(199, 125, 255, 0.2);  color: var(--color-verdict-unclear); }
+
+.ec-reason {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.ec-fix-textarea {
+  resize: vertical;
+  min-height: 72px;
+  font-size: var(--font-size-body-sm);
+}
+
+.ec-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ec-actions .btn {
+  font-size: var(--font-size-body-sm);
+  padding: var(--space-1) var(--space-3);
+}
