@@ -274,4 +274,39 @@ router.patch(
   }
 );
 
+/**
+ * GET /v1/findings/:id
+
+ *
+ * Retrieves a single finding by ID, scoped to the caller's organisation.
+ */
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId  = req.org?._id || req.orgId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success : false,
+        error   : `Invalid finding ID "${id}".`,
+        code    : 'INVALID_ID',
+      });
+    }
+
+    const finding = await Finding.findOne({ _id: id, orgId }).lean();
+    if (!finding) {
+      return res.status(404).json({
+        success : false,
+        error   : `Finding "${id}" was not found in your organisation.`,
+        code    : 'FINDING_NOT_FOUND',
+      });
+    }
+
+    return res.json(finding);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 module.exports = router;
+

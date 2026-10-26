@@ -70,8 +70,12 @@ async function start() {
     console.log('[server] Connecting to MongoDB…');
     await connectDB();
 
-    console.log('[server] Bootstrapping MinIO bucket…');
-    await ensureBucket();
+    try {
+      console.log('[server] Bootstrapping MinIO bucket…');
+      await ensureBucket();
+    } catch (minioErr) {
+      console.warn('[server] MinIO unreachable (file storage offline):', minioErr.message);
+    }
 
     // Start background shelf-life warning scheduler
     const { startShelfLifeScheduler } = require('./services/shelfLifeScheduler');
