@@ -17,7 +17,7 @@ export default function KnowledgeBasePage() {
     setFetchError('');
     try {
       const { data } = await getSources();
-      setSources(data);
+      setSources(Array.isArray(data) ? data : (data?.data || []));
     } catch {
       setFetchError('Failed to load sources. Please try again.');
     } finally {

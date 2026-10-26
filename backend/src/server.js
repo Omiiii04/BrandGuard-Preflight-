@@ -45,9 +45,9 @@ app.get('/', (_req, res) => {
   res.json({ name: 'BrandGuard Preflight API', version: '1.0.0', status: 'running' });
 });
 
-// TODO: mount feature routers here as they are built, e.g.:
-// const draftsRouter = require('./routes/drafts');
-// app.use('/v1/drafts', draftsRouter);
+// ── Feature routes ──────────────────────────────────────────────────────────
+const sourcesRouter = require('./routes/sources');
+app.use('/v1/sources', sourcesRouter);
 
 // ── 404 catch-all ───────────────────────────────────────────────────────────
 app.use((_req, res) => {
