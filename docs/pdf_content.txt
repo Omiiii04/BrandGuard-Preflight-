@@ -1,0 +1,758 @@
+
+=== PAGE 1 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+BrandGuard Preflight
+Product plan | Inkloom AI problem statement | 25 October 2026
+Team: Somnath (Team Lead, MERN Full Stack Developer) | Falguni Sharma (MERN Full Stack Developer) | Om
+Apar (AI/ML Specialist)
+Preflight checks content before it goes out. Every claim in a draft is compared with the
+company's own approved guidelines, facts and past content. When we can prove a problem,
+we show the proof and suggest a fix that keeps what the writer meant. When we can't prove it
+either way, a person decides.
+1. Problem definition and evidence
+Most growing companies have brand guidelines, but in practice nobody checks content against them. Writing
+now comes from employees, agencies and AI tools, and mistakes like a wrong claim, an old price, off-tone
+wording or an off-brand image often reach the public before anyone spots them. The surveys below come from
+vendors and trade press, so read them as a rough guide, but they all tell the same story:
+• 85% of organisations have brand guidelines but only about 30% enforce them consistently; 77% regularly
+deal with off-brand content (Marq).
+• 47.1% of marketers meet AI inaccuracies several times a week and 36.5% say incorrect AI content has
+already gone public (NP Digital, 565 US marketers).
+• 50% of consumers prefer brands that avoid GenAI in consumer-facing content; Gartner advises labelling AI
+use (1,539 US consumers).
+Most tools look at how a piece of writing sounds. We also check what it says: is each claim true, is it current,
+and does it match what the brand has already published?
+1.1 How we read the problem statement
+The brief is short, but almost every phrase in it is a design requirement. Below, we turned each phrase into what
+it really asks for and how Preflight responds.
+Phrase in the brief What it really demands Our design response
+Content from multiple Many authors, no shared memory, rising One gate that every source must pass,
+employees, agencies and AI volume; AI makes errors faster including an API for other AI tools
+tools
+Incorrect claims, outdated Facts have a shelf life; errors must be Claim Shelf-Life, contradiction check
+information, inconsistent caught before publication, not after against past content, visual and
+language, off-brand visuals accessibility checks
+Check against approved The ground truth must be the Evidence-bound findings: no source
+guidelines, facts and assets organisation's own approved material, not means no violation
+the model's opinion
+Explain issues and suggest Feedback must teach, and the creator's Evidence card; Intent Lock with a meaning
+corrections that preserve purpose has to be captured first check on every fix
+purpose
+Creators, managers and Roles, comments, approvals and an Role-based workflow, version diffs, Brand
+authorised reviewers accountable record Passport
+collaborate and track changes
+Insights into repeated mistakes The guidelines themselves are a product Insights dashboard and Guideline
+and unclear guidelines that needs debugging Debugger
+Page 1
+=== PAGE 2 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Balance automation with human Explicit rules for what software may Decision matrix, redaction preview, rules-
+control; protect confidential decide, and a security-first design only mode, disclosure of AI use
+material; reliable, explainable
+results
+1.2 Root causes behind the failures
+1. Guidelines are written for people, not machines. A rule like "keep a friendly but professional tone" can't be
+checked the same way twice, so enforcement depends on who happens to review.
+2. Facts have no owner and no expiry date. Prices, customer counts and policies change, but old copies stay
+in decks, posts and web pages and nobody is told.
+3. Feedback comes late and without a reason. Problems show up after publishing or after several review
+rounds, so people start working around review.
+1.3 Design tensions we must resolve
+Tension Our position
+Speed vs control Automate only what can be proven exactly; route everything unproven to a person with
+the evidence attached
+Catching more vs being Prefer fewer, sourced findings over many guesses; a tool that cries wolf gets ignored
+trusted
+AI help vs confidentiality Local-first design, redaction preview before any external call, and a mode with the model
+switched off
+Strict rules vs creative Suggestions are opt-in and overrides need a reason; repeated overrides signal an unclear
+freedom rule to fix, not a person to blame
+1.4 A typical failure, step by step
+Step What happens today Where it goes wrong
+1 The returns policy changes from 14 days to 30 days. Nobody is told that older posts, decks and FAQs now
+The policy page is updated. contradict it.
+2 A new agency writer drafts a promotional post from an The guidelines don't mention return periods, and the
+old brief that says "14 days". writer has no way to look up the current fact.
+3 An AI tool rewrites the post and adds "the best returns The new claim has no evidence behind it, and the tool
+in India". sounds confident.
+4 The brand manager skims the post, likes the tone and Checking facts and claims was never part of the
+approves it. review, and she is reviewing 40 other items.
+5 The post goes live. A customer quotes it at the support The error is found by a customer, after the damage is
+desk. done.
+Preflight steps in at step 2 and 3: it shows the writer the current policy next to the draft, and it asks legal about
+the superlative before the post goes anywhere near the brand manager.
+1.5 What a good solution has to do
+1. Catch problems before publication, not after.
+2. Base every judgement on the organisation's own approved material, so results can be checked.
+3. Explain each issue and offer a fix that keeps the writer's purpose, so people learn and don't work around it.
+4. Hand anything uncertain or risky to the right person, with the evidence ready.
+5. Keep confidential material inside the organisation and say clearly when AI or an outside service is used.
+Page 2
+=== PAGE 3 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+6. Show where the guidelines themselves are the problem, so the same mistake stops repeating.
+2. Target users, needs and organisational setting
+We are designing for a growing company of roughly 100 to 2,000 people. Marketing, sales, support and regional
+teams all publish, agencies and AI tools help out, and a small brand team of 2 to 8 people owns the guidelines
+but can't read everything.
+Persona Core need Main fear
+Creator (marketer, sales Fast feedback with proof; fixes Vague rejections
+rep, agency writer) that keep my message
+Brand manager Catch issues before publishing; Becoming the manual bottleneck
+stop repeat mistakes
+Authorised reviewer Only items needing expert eyes, Approving something unsupported
+(legal, product, with evidence attached
+compliance)
+Knowledge owner / One place to keep facts current Stale or leaked material
+admin
+Leadership Proof that risk is falling A public brand incident
+3. Research, interviews, observations and surveys
+So far our evidence is secondary: published surveys and standards, listed in section 1 and in the table below.
+We have planned interviews, a survey and some observation for the next stage, but we won't report any results
+until we have actually collected them.
+3.1 Secondary evidence collected
+Source Finding Used for
+Marq (formerly Lucidpress) brand 85% of organisations have guidelines, about 30% Problem, rule enforcement
+consistency research enforce them consistently, 77% face off-brand
+content
+NP Digital survey, 565 US 47.1% meet AI inaccuracies weekly; 36.5% say Evidence-bound checking,
+marketers (Feb 2026) incorrect AI content went public; 70%+ spend 1 to 5 human review
+hours a week fact-checking
+Gartner survey, 1,539 US 50% prefer brands that avoid GenAI in consumer- AI-use disclosure
+consumers (Mar 2026) facing content; labelling AI use advised
+Berkeley SCET overview of Factuality and faithfulness hallucinations are distinct Grounding every finding in a
+hallucinations failure types source
+WCAG 2.2 (W3C), OWASP Top 10 Accessibility and LLM security standards Accessibility checks, prompt-
+for LLM Applications injection defence
+3.2 Primary research plan
+Method Who and how many What we want to learn Findings
+Interviews 5 to 8: brand or marketing How content is checked today, last off-brand to fill
+managers, creators, one legal or incident, what would make them trust
+compliance reviewer, one agency automated feedback
+writer
+Page 3
+=== PAGE 4 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Survey 30+ marketers and content Frequency of off-brand or wrong content, time to fill
+creators lost in review, share of AI-assisted content
+Observation 2 to 3 real review cycles Rounds taken, who comments on what, which to fill
+issues repeat
+Guideline 3 to 5 public brand guidelines How ambiguous the rules are; which can to fill
+audit become automated checks
+Prototype test 5 users on the prototype Are proofs clear, are fixes acceptable, false- to fill
+positive rate
+What we want to test: (1) creators accept feedback more readily when they can see the source passage and
+the fix keeps their message; (2) contradicting past published content is common and rarely checked; (3)
+reviewers spend most of their time on a small share of issues, mainly claims and facts; (4) many repeated
+mistakes come from unclear guidelines, not careless writers; (5) teams will only adopt AI checks if people keep
+final approval and the tool shows its evidence.
+3.3 Research by team member and domain
+Each of us researches the area we own. The last column is for each person's own notes and links, so only work
+that was really done appears there.
+Somnath: backend, security and workflow
+Research focus What the evidence says Design decision Member notes
+Role-based review workflows Review is where brand risk is caught; Four roles, versioned to fill
+and audit logging in content guidelines are rarely enforced (about drafts, immutable audit
+approval 30% consistently) log
+Securing confidential Marketers cite privacy and stolen data Per-organisation to fill
+uploads: tenant isolation, among top GenAI concerns (Statista, isolation, encrypted
+encryption, retention June 2025) storage, deletion
+controls
+LLM application risks such as Uploaded documents can contain Treat uploads as data; to fill
+prompt injection and data hostile instructions redaction gateway
+leakage (OWASP LLM Top 10) before external calls
+Content hashing for tamper- Standard hashing (SHA-256) is enough Brand Passport stores a to fill
+evident records to detect later edits content hash per
+approved version
+API design and integration Teams need feedback where they Versioned REST API; to fill
+points: OpenAPI contracts, already write Agent Gate API for
+Slack or Teams notifications, external AI tools
+Docs and CMS hooks
+Falguni Sharma: frontend and UX
+Research focus What the evidence says Design decision Member notes
+How reviewers consume Over 70% of marketers spend 1 to 5 Evidence card with to fill
+feedback: inline highlights, hours a week fact-checking AI content draft, proof and verdict
+side-by-side comparison, (NP Digital) side by side
+threaded comments
+Accessibility standards: WCAG AA requires 4.5:1 contrast for Accessibility checks and to fill
+WCAG 2.2 contrast, alt text, normal text an accessible UI of our
+heading order, plain language own
+Page 4
+=== PAGE 5 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Existing brand-governance Most check style and assets; few show Proof panel and to fill
+and style tools: what their source-linked proof comparison views as the
+review screens show and core screen
+miss
+Om Apar: machine learning
+Research focus What the evidence says Design decision Member notes
+Claim extraction and claim- LLMs produce plausible but wrong Model compares only to fill
+to-source matching using content; 36.5% of marketers saw against retrieved
+embeddings and natural- incorrect AI content go public (NP passages; every verdict
+language inference Digital) needs a source
+Hallucination and Factuality and faithfulness hallucination Ungrounded output is to fill
+faithfulness: grounding are distinct failure types (Berkeley shown as a question, not
+outputs in provided context SCET overview) a violation
+Tone and voice modelling Tone judgement is the least reliable Tone is advisory; to fill
+from approved examples; part of automated review contradictions and facts
+contradiction detection are the blocking checks
+against past content
+Image checks: OCR, colour Visual drift is common and often caught Basic image checks to fill
+palette extraction, logo only in design review first; logo matching as
+matching, contrast ratio stretch
+Evaluation: planted-issue test Accuracy, not speed, is the competitive 60-draft seeded test set to fill
+set, precision, recall, advantage (NP Digital) and published metrics
+confidence calibration
+Sources used in this plan: Marq via Emulent; NP Digital survey via Martech Edge; Gartner, March 2026; Berkeley SCET on
+hallucinations; Statista, B2B marketer GenAI concerns; WCAG 2.2 (W3C) and OWASP Top 10 for LLM Applications are cited
+as standards.
+4. Proposed solution, value proposition and workflow
+Every draft has to pass three tests, and for each result Preflight shows the proof behind it.
+Test Question Checked against
+Truth Is every claim consistent with approved guidelines, facts and Uploaded guidelines, fact sheets, claim
+the brand's own published history? evidence, past approved content
+Risk How could this be misread or quoted against us? Hostile-reader pre-mortem; confidential-
+term watchlist
+Intent Do suggested fixes still say what the creator meant? Creator's stated purpose, audience and
+must-say points
+Evidence card: nothing is flagged without all three parts
+Part Shows
+Draft The exact sentence, highlighted
+Proof Matching passage from your uploaded source or past content, with file name, page and version
+Verdict Supported, Contradicted, Outdated, Not found or Unclear, plus a confidence level
+Page 5
+=== PAGE 6 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Value proposition by stakeholder
+Stakeholder Value
+Creators Instant feedback with proof; fewer rewrite rounds; fixes that keep their message
+Brand managers Fewer late catches; a view of where guidelines are unclear
+Reviewers Only unproven or high-risk items, with evidence already attached
+Organisation Lower risk of public errors, contradictions and leaks; an audit record for every published asset
+Who decides: automation, creator or human
+Situation System does Who acts
+Claim matches an approved fact Marks verified, logs it Nobody
+Exact rule broken (banned term, low Flags with rule and suggested fix Creator accepts, edits or
+contrast, no alt text) dismisses
+Draft contradicts a source (high Shows both passages and a correction Creator, then manager
+confidence)
+Source expired, or two sources disagree Does not guess; asks the owner Knowledge owner
+No proof found Shown as a question, never a violation Right reviewer (legal, product)
+Low confidence or risky topic (legal, Packs evidence and queues it Authorised reviewer
+health, finance, comparisons)
+Reviewer rules on an item Records reason; offers to save as Owner confirms
+approved fact or rule
+End-to-end workflow
+Only the highlighted step runs on its own. Every other step is a person deciding something, or the system writing it down.
+Approved sources and past content
+(owner, version, expiry)
+↓
+Creator submits draft + Extract claims, terms, tone Automated match and Verdict + confidence
+→ → →
+intent judge
+↓
+Proof found: verified, auto-logged Contradicted or rule broken: creator No proof, low confidence or risky:
+fixes, meaning check human reviewer
+↓
+Manager approval Brand Passport logged; a person Insights; rulings update approved
+→ →
+publishes sources
+Page 6
+=== PAGE 7 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+What a finding looks like
+This is the card a creator sees for the returns example. Everything on it comes from the uploaded sources or
+from the creator's own intent.
+Finding 1 of 4: Factual claim Contradicted Confidence 92%
+Draft "Free returns within 14 days."
+Proof Returns Policy, version 2, page 3: "Customers may return items within 30 days of delivery."
+(owner: Support, expires 31 Mar 2027)
+Why flagged The draft states a return period that differs from the approved policy.
+Suggested fix "Free returns within 30 days."
+Meaning check Kept: free returns, a time limit. Changed: 14 days to 30 days. Dropped: nothing from the
+creator's must-say list.
+Accept fix Edit Dismiss with reason Ask the owner
+Review lifecycle
+Draft → Checked → In review → Approved → Published
+Changes requested: back to the Waiting on owner: a source is expired Blocked: confidential term found,
+creator, new version, checked again or sources disagree cannot go to external services
+A creator's journey
+1. Priya, a marketer, uploads a draft and fills in a short intent form: purpose, audience and two must-say
+points.
+2. Preflight returns four findings in under a minute. Two are verified, one is a contradiction with the returns
+policy, one is a superlative with no evidence.
+3. She accepts the fix for the policy error and edits the suggested rewrite of the superlative.
+4. The "best returns in India" line has no evidence, so it is routed to the product and legal reviewers as a
+question. She keeps working on the rest.
+5. The legal reviewer rules that the claim can't be used. The ruling is saved so the next writer who tries the
+same claim is told straight away.
+6. Her manager approves the new version, a Brand Passport is saved, and Priya publishes.
+What is different from typical approaches
+This compares general kinds of tools, not specific vendors. Before the build we will check it against a few real
+products and fix anything we got wrong.
+Typical approach Usually good at Usual gap What Preflight adds
+Style and grammar Spelling, tone, readability Do not know whether a Claim checking against
+checkers claim is true or current approved facts with expiry
+dates
+Brand portals and asset Storing logos, templates and rules Rules are not checked Per-draft review with
+libraries automatically on each source-linked findings
+draft
+Page 7
+=== PAGE 8 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+General AI chat used as Fluent suggestions May invent issues; no Evidence-bound output,
+a reviewer source, no audit trail, redaction, audit log, human
+data leaves the routing
+company
+What makes us different, in one line: instead of judging how content sounds, Preflight checks what it says
+against the company's own approved facts and its own published history, and every human ruling becomes
+knowledge it can reuse. We haven't seen these ideas emphasised together:
+• Findings that can't exist without a cited source passage: no source, no violation.
+• Contradiction checks against the brand's own past content.
+• Claim Shelf-Life: facts have owners and expiry dates, and the owner is warned before one lapses.
+• Intent Lock: every fix comes with a note on what it keeps and what it drops.
+• Guideline Debugger and Rule Simulator: guidelines get tested and improved like any other asset.
+• Brand Passport: a tamper-evident record for each approved asset, including whether AI was used.
+5. Planned features, technology stack, integrations and data sources
+5.1 Core features
+Capability What it does Phase
+Knowledge base Import or define guidelines (PDF, DOCX, Markdown), approved facts, MVP
+terminology, claim evidence, reusable assets and past approved
+content; owner, version and expiry on every item
+Content review Text, DOCX and PDF; PPTX and images next; findings mapped to page, MVP
+slide or region
+Detection Tone, terminology, messaging, facts, claims, visual usage, accessibility MVP
+Evidence cards and Why flagged, which source, suggested fix; accept, edit or dismiss MVP
+suggestions
+Review workflow Roles, comments, approvals, assignments, revision history with diffs MVP
+Insights dashboard Repeated mistakes, unclear rules, time to approval, by team and rule Phase 2
+Privacy and disclosure Role-based access, audit log, redaction preview, visible AI-use notice MVP
+5.2 Unique features we are implementing
+# Feature What it does and why it is different Phase
+1 Evidence-bound A finding must cite a passage in the organisation's own uploads. 1
+findings No source means "not found" and a human is asked, so the tool
+never invents a violation.
+2 Self-contradiction Compares a draft with everything the brand already published, not 1
+check just the rulebook (for example 14-day returns vs the 2025 policy
+of 30 days).
+3 Claim Shelf-Life Every approved fact has an owner and expiry date. Owners are 1
+warned before it lapses; drafts using an expired fact are flagged
+"outdated".
+4 Intent Lock with Creator states purpose and must-say points; every fix shows what 1
+meaning check was kept and what was dropped.
+Page 8
+=== PAGE 9 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+5 Hostile-reader pre- Shows the single line most likely to be quoted against the brand 1
+mortem and why, from regulator, journalist, competitor and screen-reader
+viewpoints.
+6 Rulings become A reviewer's decision can be saved as an approved fact or rule, 1
+knowledge so the same question is resolved automatically next time.
+7 Guideline Debugger Highlights rules that are often overridden or disputed and 1
+suggests clearer wording, pointing to where the guidelines
+themselves are unclear.
+8 Brand Passport Each approved asset gets a record: content hash, checks run, 1
+rules version, approvers and whether AI was used. Tampering
+after approval is detectable.
+9 Redaction preview and Confidential terms are replaced with placeholders before any 1
+zero-egress mode external AI call and the user sees what would leave. Rules-only
+mode runs with the model off.
+10 Confidential-term Blocks drafts that mention embargoed names (unreleased 1
+tripwire products, client names) before the announcement.
+11 Rule Simulator Before changing a guideline, replay it on the last 100 drafts to see 2
+how many would be flagged.
+12 Agent Gate API Other AI tools and agencies must obtain a Preflight result before 2
+publishing, so AI content cannot skip review.
+13 Voice Fingerprint Learns the brand's tone from approved posts and shows a tone- 2
+drift meter.
+14 Multilingual Checks that a Hindi or Marathi version keeps the same claims as 2
+consistency the English original.
+15 Accessibility auto- Drafts alt text, plain-language rewrites and contrast fixes for the 2
+suggest creator to approve.
+16 Trust Report export One PDF per asset with evidence, approvals and AI-use 2
+disclosure, for audits.
+5.3 Technology stack and team ownership
+We are using the MERN stack (MongoDB, Express, React, Node) plus a Python service for the ML work. Every
+part has one owner.
+Somnath: Backend and APIs Falguni Sharma: Frontend (React) Om Apar: Machine learning (Python)
+(Node.js, Express, MongoDB) Upload and review screens, evidence Claim extraction, embeddings and
+REST API design and OpenAPI cards, diff and comparison views, retrieval, claim-to-source matching,
+contract, versioned endpoints, comments and approval UI, tone and contradiction models, intent
+integrations and Agent Gate API, auth dashboard, accessible and meaning check, pre-mortem, OCR
+and roles, workflow engine, responsive interface, calls Somnath's and image checks, evaluation and
+knowledge-base storage, versioning API test set
+and audit log, file handling, security
+and tenant isolation, redaction
+gateway, ML service orchestration,
+insights aggregation
+Layer Choice Owner Why
+Front end React with side-by-side evidence and diff views Falguni Highlights, proof panel,
+comments, revisions
+API layer REST with an OpenAPI spec; versioned endpoints Somnath Clear contract between UI,
+backend and external tools
+Page 9
+=== PAGE 10 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Server Node.js and Express Somnath Workflow, roles and
+orchestration in one language
+with the UI
+Database MongoDB: users, roles, comments, versions, audit Somnath Flexible documents for findings
+log, passports and revisions
+Auth and JWT or OIDC, role-based access, per-organisation Somnath Protects confidential brand
+security isolation, encryption, upload scanning material
+File storage Encrypted object storage (S3-compatible) Somnath Uploaded sources, drafts,
+exports
+Parsing and PyMuPDF, python-docx, Tesseract Om Text, page and slide positions
+OCR from documents and images
+Retrieval Sentence embeddings with a vector index (FAISS or Om Every finding links to a source
+Chroma), stored with file, page, version, expiry passage
+Matching and Rules first, then NLI-style semantic matching; Om Fewer false alarms, explainable
+judging confidence scoring verdicts
+Language Configurable provider with no-training, no-retention Om Rewrites, intent check, pre-
+model terms, or a small local model; can be turned off mortem
+Image checks OpenCV: palette, logo matching, text-over-image Om Visual consistency and
+contrast accessibility
+ML service FastAPI wrapper, called only by the Node backend Om (service), Clean boundary between app
+Somnath and models
+(calls)
+One rule we are keeping: the browser never talks to the ML service directly. Falguni's UI calls Somnath's API, and the
+backend applies access rules and redaction before it calls Om's service.
+5.4 Integrations
+Integration Purpose Phase
+Web app with upload and Main entry point for creators and reviewers MVP
+paste
+Slack or Microsoft Teams Review and approval notifications where teams already work Phase 2
+Google Docs or CMS plug-in Check drafts where they are written Phase 2
+Agent Gate API Lets other AI tools and agencies obtain a Preflight result before Phase 2
+publishing
+Model provider (optional, Rewrites and meaning checks, with no-training and no-retention MVP
+external) terms; disclosed to users and can be switched off
+5.5 Data sources
+We only use material the organisation gives us: brand guidelines, approved fact sheets, glossary and
+terminology, claim-evidence records, the asset library (logos, palette, templates) and past approved content.
+Nothing is pulled from the web unless an admin turns that on. For the demo we will use a made-up company
+with synthetic documents, so no real confidential material is involved. Over time, reviewer rulings and decision
+logs from inside the product become another source for insights.
+Page 10
+=== PAGE 11 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+5.6 System architecture
+Browser: React UI (Falguni)
+upload, evidence cards, diff view, comments, approvals, dashboard
+↓ REST API with OpenAPI contract (designed and implemented by Somnath)
+Node.js and Express backend (Somnath)
+auth and roles, workflow engine, versioning, audit log, redaction gateway, insights aggregation, ML orchestration
+↓ ↓
+MongoDB: users, sources, drafts, Encrypted object storage: uploaded Python ML service (Om)
+findings, comments, passports, audit files and exports parse, extract, retrieve, match, rewrite,
+log pre-mortem, image checks
+↓ only after redaction, and only if an admin allows it
+Optional external language model (disclosed in the UI; no-training, no-
+retention terms; can be off)
+Colours show who owns what: green is frontend, blue is backend and APIs, orange is machine learning. The browser never
+calls the ML service directly.
+5.7 Data model (MongoDB collections)
+Collection Key fields Purpose
+organisations, users orgId, role (creator, manager, reviewer, owner), Tenant isolation and role-based
+permissions access
+sources file, type, owner, version, effective date, expiry date, Approved guidelines, facts,
+status terminology, assets
+passages sourceId, version, page, text, embeddingRef Retrieval units that findings cite
+facts statement, value, evidence link, owner, expiry, Claim Shelf-Life and approved
+supersedes claims
+drafts, draftVersions content, format, intent (purpose, audience, must-say), Revision history and diffs
+author, contentHash
+findings draftVersion, span, type, verdict, confidence, Evidence cards
+proofPassageId, suggestedFix, status
+comments, decisions thread, author, action (approve, request changes, Collaboration and accountability
+override), reason
+passports, auditLog contentHash, checks run, rulesVersion, approvers, Brand Passport and traceability
+aiUsed; append-only events
+5.8 Main API endpoints
+Endpoint Purpose
+POST /sources, GET /sources/:id Upload and define approved material; list versions and expiry
+POST /drafts, POST /drafts/:id/review Submit a draft with intent and run the review
+GET /drafts/:id/findings, PATCH /findings/:id Read evidence cards; accept, edit or dismiss with a reason
+POST /drafts/:id/comments, POST / Collaboration and approval steps by role
+drafts/:id/approve
+GET /passports/:id Verify the record of an approved asset
+GET /insights/rules, GET /insights/mistakes Governance insights and unclear-rule candidates
+Page 11
+=== PAGE 12 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+POST /gate/check Agent Gate: external AI tools request a Preflight result before publishing
+Internal ML endpoints, called only by the backend: /extract-claims, /match, /rewrite, /premortem, /image-check, /detect-
+entities.
+5.9 ML pipeline, models and evaluation
+Stage Approach Why
+Parse PyMuPDF and python-docx for text and page positions; Findings point to the exact page or
+Tesseract OCR for images region
+Extract claims Rules and a small language-model step to pull out Focus on checkable statements first
+numbers, names, product terms and promotional claims
+Retrieve Multilingual sentence embeddings with a vector index Candidate proofs for each claim;
+(FAISS or Chroma); passages stored with version and supports Hindi and Marathi later
+expiry
+Judge Exact rules first; then an entailment-style comparison Supported, Contradicted, Outdated,
+between claim and retrieved passage; verdict and Not found or Unclear
+confidence
+Suggest Language model drafts a fix constrained to the retrieved Fixes that preserve purpose
+facts and the creator's intent; meaning check compares
+original and fix
+Pre-mortem Structured prompts from regulator, journalist, competitor Risk test beyond rules
+and screen-reader viewpoints; outputs the riskiest line
+Image checks OpenCV for palette and contrast; logo template matching Visual consistency and accessibility
+as stretch
+Evaluation. We will use a seeded test set of about 60 drafts with planted issues and report recall, precision,
+how often findings cite a source, how many contradictions we catch, and whether our confidence is calibrated
+(does "90% sure" really mean about 90% correct?). Findings that reviewers mark as wrong go back into the
+test set. Low-confidence results never block anything; they go to a person.
+5.10 How each unique feature works technically
+Feature Technique Owner
+Evidence-bound findings Every finding stores a proofPassageId. The API refuses to save a Somnath, Om
+finding of type violation without one; otherwise it is stored as a
+question.
+Contradiction against past Past approved content is embedded and indexed like any other Om
+content source. Nearest passages are compared with the claim using an
+entailment-style model.
+Claim Shelf-Life Expiry date on every fact. A scheduled job warns owners 30 days Somnath
+ahead; at review time an expired fact returns the verdict Outdated.
+Intent Lock Structured intent form. Each fix is checked for coverage of the Om, Falguni
+must-say points and for similarity to the original meaning, and the
+result is shown as kept, changed and dropped.
+Pre-mortem Several viewpoint prompts (regulator, journalist, competitor, Om
+screen-reader user) with a fixed JSON output. We keep the single
+highest-risk line and its reason.
+Brand Passport SHA-256 of the approved content plus checks run, rules version, Somnath
+approvers and AI-use flag, stored in an append-only collection.
+Page 12
+=== PAGE 13 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Redaction and tripwire Org watchlist and entity detection replace confidential terms with Somnath, Om
+placeholders before any external call; embargoed terms block the
+draft until the embargo date.
+Guideline Debugger Per-rule counts of flags, overrides and disputes. Rules with a high Somnath, Falguni
+override rate are ranked; a suggested rewording is proposed for a
+person to approve.
+5.11 Confidence thresholds and routing
+Situation What the system shows Who handles it
+Exact rule matched Finding with the rule and a fix Creator
+Claim matched to a passage, confidence Supported or Contradicted, with proof Creator, then manager if
+0.85 or higher Contradicted
+Confidence between 0.60 and 0.85 Unclear, shown as a question Creator; reviewer if the topic is
+risky
+Confidence below 0.60, or no passage Not found, shown as a question Reviewer or knowledge owner
+found
+High-risk topic (legal, health, finance, Always queued, whatever the Authorised reviewer
+comparisons) confidence
+These numbers are starting values. We will tune them on the test set and publish the final values with the results.
+5.12 Threat model and controls
+Threat Control
+Hostile instructions hidden in an Uploaded text is treated as data. The model gets no tools, outputs must match a
+uploaded document (prompt fixed schema, and anything that doesn't is discarded.
+injection)
+One organisation seeing another's orgId on every record and query, separate vector index per organisation, checks
+data enforced on the server.
+Confidential text sent to an outside Redaction gateway with a preview, a per-organisation allow-list for external services,
+model and a rules-only mode.
+Someone approving beyond their Role checks on the server for every approval; overrides need a written reason and
+role are logged.
+Changes to approved content or to Content hash in the Brand Passport; append-only audit log that even admins cannot
+the log edit.
+Malicious or oversized uploads File-type allow-list, size limits, virus scan, parsing in an isolated process.
+Made-up findings from the model No source, no violation; schema validation; confidence thresholds; low confidence
+goes to a person.
+People trusting a green tick too Every report states "checked against these sources only" and lists what was not
+much checked.
+5.13 Testing, performance and deployment
+• Testing. Unit tests for every rule; a golden test set for the ML pipeline; API tests against the OpenAPI
+contract; one end-to-end test that replays the demo story.
+• Performance goal. A one-page draft reviewed in under 30 seconds on a laptop-class machine, with the
+model off or on a small local model.
+Page 13
+=== PAGE 14 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+• Deployment. Docker Compose for the demo (web, API, ML service, MongoDB). Settings come from
+environment variables and no secrets are stored in the repository.
+• Accessibility of our own UI. Keyboard navigation, sufficient contrast and automated checks with axe.
+5.14 Choices we considered
+Decision Chosen Why, and the alternative
+Database MongoDB The team knows MERN, and findings and
+revisions are document-shaped. PostgreSQL with
+pgvector would also work.
+Vector search FAISS or Chroma inside the ML service Runs locally, so embeddings never leave the
+organisation. A managed vector database would
+add cost and data exposure.
+Judging method Rules first, then an entailment-style Predictable and explainable. A single large model
+model, then a language model for rewrites prompt is faster to build but harder to trust.
+Model hosting Optional external provider with no-training Gives a way to run with no external calls at all.
+terms, or a small local model
+6. Responsible design: privacy, security and human oversight
+People make every important decision, and whenever the system says something, it has to show its evidence.
+Area Commitment How
+Human oversight AI never publishes, approves Fixes are opt-in; high-risk topics need a named reviewer; overrides
+or rewrites on its own need a written reason
+Explainability No finding without a source Every finding shows passage, file, page, version, severity and
+confidence; ungrounded output is labelled a question
+Reliability Fewer false alarms beats more Rules first, model second; thresholds; wrong findings feed a test
+alarms set, not a hidden retrain
+Privacy and Brand material is confidential Tenant isolation, encryption, least-privilege access, audit log,
+security by default configurable retention and deletion
+AI and external Disclosed, not hidden Settings page lists each service and what data it receives; AI-use
+services flag stored on every version
+Prompt injection Uploaded text is data, never Input separation and output validation (see OWASP LLM risks)
+instructions
+Data use No training on customer Provider terms and architecture both prevent it
+content
+7. Scope, feasibility and delivery plan
+We have layered the plan on purpose: a small core that proves the idea from start to finish, and extras we can
+drop without breaking anything.
+Page 14
+=== PAGE 15 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+7.1 Scope
+In scope for the MVP Out of scope (stretch or later)
+Upload and define guidelines, facts, terminology; owner, PPTX and advanced image review, logo matching
+version, expiry Slack, Teams, Google Docs and CMS plug-ins
+Text, DOCX and PDF review Agent Gate API, Rule Simulator
+Rules checks, claim matching, contradiction against past Voice Fingerprint, multilingual consistency
+content Trust Report export
+Evidence cards, intent lock and suggested fixes Auto-publishing (a non-goal)
+Roles, comments, approvals, version history Training models on customer content (a non-goal)
+Claim Shelf-Life, Guideline Debugger (basic), Brand
+Passport (content hash), pre-mortem
+Redaction preview, audit log, AI-use disclosure, rules-only
+mode
+Basic image checks: alt text, contrast, palette
+7.2 Delivery plan by stage and owner
+Stage lengths will depend on how many days we have. The order and the exit checks stay the same.
+Stage Somnath (backend) Falguni (frontend) Om (ML) Exit check
+1. Project setup, OpenAPI UI shell, upload and Parsing, synthetic Upload a source and see it
+Foundations contract and API source screens dataset and test set, indexed
+skeleton, auth and retrieval index
+roles, MongoDB
+schema, file upload
+2. Core loop Review and findings Draft submit screen, Claim extraction, A draft returns sourced
+endpoints, ML evidence card and matching and verdicts, findings end to end
+orchestration, findings comparison view rules checks
+storage
+3. Workflow Comments, approval Comments and Fix suggestions with Full demo story runs for all
+and unique and passport approval UI, diff view, meaning check, pre- roles
+features endpoints, versions, dashboard, intent lock mortem, shelf-life logic
+audit log, redaction
+gateway, Agent Gate
+API
+4. Security review, error Polish, accessibility Evaluation report, Metrics measured; demo
+Hardening handling, deployment pass, demo flow threshold tuning, image rehearsed
+and demo checks
+7.3 Risks and fallbacks
+Risk Fallback
+Model output is unreliable on tone or meaning Keep tone advisory only; rely on exact rules and sourced checks;
+send low confidence to a human
+Claim-to-source matching is noisy Start with numbers, names and product terms; widen to free-text
+claims later
+Image analysis is too weak in time Limit visuals to alt text, contrast and palette
+No real company data available Use a fictional company, synthetic documents and public style guides
+External model provider unavailable or not Rules-only mode and a small local model keep the core loop working
+permitted
+Integration between the Node backend and the Agree the API contract and internal ML endpoints in Stage 1 and mock
+Python service slips them so the UI is not blocked
+Page 15
+=== PAGE 16 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Scope creep Stretch features are listed and ranked; none is needed for the demo
+7.4 Why this is achievable with a three-person team
+• Each person owns one layer with a clear contract, so we can work in parallel.
+• Rules come first, so most findings are predictable and easy to test. The model only helps with matching
+meaning and drafting fixes.
+• The MVP sticks to text, DOCX and PDF with basic image checks, and uses synthetic data we control.
+• Everything is standard and well known: React, Node, MongoDB, FastAPI, FAISS and OpenCV.
+7.5 Priority and effort by feature
+Effort is a rough size: S is a day or less, M is two to three days, L is about a week of one person's time. We will
+rebalance if estimates prove wrong.
+Feature Priority Effort Owner
+Upload sources, owners, versions, expiry Must M Somnath
+Rules checks (terms, superlatives, Must M Om
+contrast, alt text)
+Claim extraction, retrieval and matching Must L Om
+Evidence cards and comparison views Must L Falguni
+Roles, comments, approvals, versions Must L Somnath, Falguni
+Suggested fixes with Intent Lock Must M Om, Falguni
+Redaction preview, audit log, AI-use Must M Somnath
+notice
+Claim Shelf-Life Should S Somnath
+Brand Passport (content hash) Should S Somnath
+Pre-mortem Should M Om
+Insights dashboard and Guideline Should M Somnath, Falguni
+Debugger
+Basic image checks Should M Om
+Agent Gate API, Rule Simulator, Voice Could M to L Shared
+Fingerprint, multilingual check, Trust
+Report
+Cut line. If time runs short, we drop from the bottom of this table. The Must rows together are enough for the
+full demo story.
+7.6 Definition of done for the MVP
+• A user can upload sources, submit a draft with intent, and get findings that each cite a source passage.
+• The returns-policy contradiction, the unsupported superlative and an expired fact are all caught in the
+demo.
+• Creator, manager and reviewer roles can comment, approve and see version history.
+• The UI shows a clear notice whenever AI or an outside service was used, and the tool works with the model
+switched off.
+• We have measured recall, precision and citation rate on the test set and can show the numbers.
+Page 16
+=== PAGE 17 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Appendix A. Alignment with the Inkloom AI problem statement
+Problem statement requirement How Preflight meets it Owner
+Import or define guidelines, approved Knowledge base: upload PDF, DOCX or Markdown, or Somnath, Falguni
+facts, terminology, reusable assets define items in the app; each has owner, version and
+expiry date
+Review text, images, documents and Text, DOCX and PDF in the MVP; PPTX and images Om, Somnath
+other formats before publication (palette, logo, contrast, alt text) as the next step
+Detect tone, terminology, messaging, Rules engine for exact checks; semantic claim-to-source Om
+facts, claims, visual and accessibility matching; tone-drift check; WCAG contrast and alt-text
+issues checks
+Explain why it was flagged and name Evidence card: the draft sentence, the proof passage Om, Falguni
+the guideline or source (file, page, version) and a verdict with confidence
+Suggest corrections that preserve the Intent lock: creator states purpose first; each fix shows a Om, Falguni
+creator's purpose, without overriding meaning check; fixes are opt-in
+humans
+Comments, approvals, revision history, Roles (creator, manager, reviewer, owner), threaded Somnath, Falguni
+role-based review comments, approve or request changes, version diffs
+Recurring problems and governance Insights dashboard and Guideline Debugger: repeated Somnath, Falguni
+insights over time mistakes, rules that are often overridden (likely unclear)
+Protect confidential materials; disclose Tenant isolation, encryption, role-based access, Somnath, Om
+AI or external services redaction preview before any external call, visible AI-use
+notice, rules-only mode
+Balance automation with human No finding without a source; unproven items go to a All
+control; reliable, explainable results human; every decision logged
+Appendix B. Success metrics and demo
+We plan to test on about 60 drafts for a made-up company, each with issues we planted ourselves. The targets
+are goals, and we will report what we actually measure.
+Metric Target Measured by
+Recall of planted issues 80% or higher Found divided by planted
+Precision of findings 85% or higher Reviewer agreement
+Findings with a cited source 100% Automated check on every report
+Self-contradictions caught 80% of planted ones Planted vs found
+Review time per draft 30% lower than manual Timed pilot, 5 users
+Unclear rules identified At least 3 High override or dispute rate
+Demo story: a creator writes "Free returns within 14 days". Preflight puts that next to the uploaded policy (page
+3, version 2, which says 30 days), marks it Contradicted and suggests a fix that keeps the message. The
+manager approves it and a Brand Passport is saved. Another post says "fastest in India", but we have no
+evidence for it, so it goes to legal as a question instead of being called wrong. After 50 drafts the dashboard
+shows one rule being overridden 70% of the time, which tells the owner it needs clearer wording.
+Page 17
+=== PAGE 18 ===
+BrandGuard Preflight | Inkloom AI Problem Statement | Product Plan
+Appendix C. Team roles
+Member Role Owns
+Somnath Team Lead, MERN Full Stack Backend and APIs: Node.js, Express, MongoDB, REST API and
+Developer OpenAPI contract, integrations and Agent Gate API, auth and
+roles, workflow, audit log, security, redaction gateway, ML
+orchestration, insights aggregation
+Falguni Sharma MERN Full Stack Developer Frontend (React): review UI, evidence cards, comparison
+views, comments and approval UI, dashboard, accessible and
+responsive interface
+Om Apar AI/ML Specialist Machine learning: claim extraction, retrieval, matching, tone
+and contradiction models, intent check, pre-mortem, OCR and
+image checks, evaluation
+Page 18
