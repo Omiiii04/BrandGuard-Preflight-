@@ -1283,4 +1283,109 @@ router.post(
   }
 );
 
+/**
+ * POST /v1/drafts/:id/override
+ *
+ * Records a finding or draft override with a mandatory written reason.
+ * Emits AuditLog event 'finding_overridden'.
+ *
+ * RBAC: Manager / Reviewer role required.
+ */
+router.post(
+  '/:id/override',
+  requireRole('reviewer', 'manager'),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.org?._id || req.orgId;
+      const actor = req.user;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid draft ID "${id}".`,
+          code: 'INVALID_ID',
+        });
+      }
+
+      const draft = await Draft.findOne({ _id: id, orgId });
+      if (!draft) {
+        return res.status(404).json({
+          success: false,
+          error: `Draft "${id}" was not found in your organisation.`,
+          code: 'DRAFT_NOT_FOUND',
+        });
+      }
+
+      const reason = req.body?.reason || req.body?.text;
+      if (!reason || !String(reason).trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'A reason is required when overriding a finding.',
+          code: 'REASON_REQUIRED',
+        });
+      }
+
+      const findingId = req.body?.findingId;
+      let findingDoc = null;
+      if (findingId && mongoose.Types.ObjectId.isValid(findingId)) {
+        findingDoc = await Finding.findOne({ _id: findingId, orgId });
+        if (findingDoc && findingDoc.status === 'open') {
+          findingDoc.status = 'dismissed';
+          await findingDoc.save();
+        }
+      }
+
+      const trimmedReason = String(reason).trim();
+      const overrideComment = new Comment({
+        orgId,
+        draftId: draft._id,
+        findingId: findingDoc?._id || (findingId && mongoose.Types.ObjectId.isValid(findingId) ? findingId : null),
+        action: 'override',
+        type: 'override',
+        author: actor?._id || draft.author,
+        authorName: actor?.name || 'Reviewer',
+        authorRole: actor?.role || 'reviewer',
+        text: trimmedReason,
+        reason: trimmedReason,
+        thread: [
+          {
+            author: actor?._id || draft.author,
+            authorName: actor?.name || 'Reviewer',
+            authorRole: actor?.role || 'reviewer',
+            text: trimmedReason,
+            timestamp: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+      });
+      await overrideComment.save();
+
+      await logEventSafe({
+        orgId,
+        actor,
+        eventType: AUDIT_EVENTS.FINDING_OVERRIDDEN,
+        entityType: 'finding',
+        entityId: findingDoc?._id || draft._id,
+        metadata: {
+          draftId: draft._id,
+          findingId: findingDoc?._id || null,
+          ruleId: findingDoc?.ruleId || null,
+          reason: trimmedReason,
+          commentId: overrideComment._id,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        comment: overrideComment.toObject(),
+        finding: findingDoc ? findingDoc.toObject() : null,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 module.exports = router;
+
