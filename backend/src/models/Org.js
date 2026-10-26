@@ -36,6 +36,14 @@ const orgSchema = new mongoose.Schema(
       maxUploadBytes:     { type: Number,  default: 10 * 1024 * 1024 }, // 10 MB
     },
 
+    /**
+     * Org-specific confidential watchlist terms (embargoed products, secret codenames, etc.)
+     */
+    watchlist: {
+      type: [String],
+      default: [],
+    },
+
     /** Soft-delete support — deactivated orgs cannot log in. */
     active: { type: Boolean, default: true },
   },
@@ -44,8 +52,5 @@ const orgSchema = new mongoose.Schema(
     collection: 'orgs',
   }
 );
-
-// Index slug for fast JWT-payload → org lookups.
-orgSchema.index({ slug: 1 });
 
 module.exports = mongoose.model('Org', orgSchema);
