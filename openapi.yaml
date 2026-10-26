@@ -1,0 +1,1811 @@
+openapi: 3.1.0
+
+info:
+  title: BrandGuard Preflight API
+  version: 1.0.0
+  description: |
+    OpenAPI 3.1 contract for **BrandGuard Preflight** — the AI-powered content
+    compliance platform built during Codex 48 (40-hour sprint).
+
+    ## API Surfaces
+
+    | Surface | Base URL | Auth |
+    |---------|----------|------|
+    | Backend REST API | `http://localhost:4000` | JWT Bearer |
+    | ML Service (internal only) | `http://localhost:8000` | None (backend-to-ML only) |
+
+    > **Security rule**: the browser MUST NEVER call the ML service directly.
+    > All ML calls are proxied through the Node.js backend after auth, org
+    > isolation, and redaction have been applied.
+
+  contact:
+    name: BrandGuard Team
+    email: team@brandguard.example.com
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:4000
+    description: Backend API (local development)
+  - url: http://localhost:8000
+    description: ML Service (internal — backend use only)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT issued by POST /v1/auth/login. Include as `Authorization: Bearer <token>`."
+
+
+    GateApiKey:
+      type: apiKey
+      in: header
+      name: X-Gate-Api-Key
+      description: Per-client API key for the Agent Gate endpoint (Phase 2).
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT / API key.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Unauthorized"
+            code: "MISSING_TOKEN"
+
+    Forbidden:
+      description: Authenticated but insufficient role.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Forbidden: insufficient role"
+            code: "ROLE_INSUFFICIENT"
+
+    NotFound:
+      description: Resource not found within the caller's organisation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Resource not found"
+            code: "NOT_FOUND"
+
+  schemas:
+
+    ObjectId:
+      type: string
+      pattern: "^[a-f0-9]{24}$"
+      example: "507f1f77bcf86cd799439011"
+
+    ISODateTime:
+      type: string
+      format: date-time
+      example: "2026-10-26T22:00:00.000Z"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "Draft not found"
+        code:
+          type: string
+          example: "DRAFT_NOT_FOUND"
+
+    # ---- Auth ----------------------------------------------------------------
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: "priya@acme.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [_id, orgId, email, role, createdAt]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        email:
+          type: string
+          format: email
+          example: "priya@acme.com"
+        role:
+          type: string
+          enum: [creator, manager, reviewer, owner]
+          example: creator
+        createdAt:
+          $ref: "#/components/schemas/ISODateTime"
+
+    # ---- Sources -------------------------------------------------------------
+    SourceType:
+      type: string
+      enum: [guideline, fact-sheet, glossary, past-content, asset]
+
+    SourceStatus:
+      type: string
+      enum: [active, expired, superseded]
+
+    Source:
+      type: object
+      required: [_id, orgId, storageRef, type, owner, version, effectiveDate, status]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        storageRef:
+          type: string
+          example: "sources/507f1f77bcf86cd799439011/returns-policy-v2.pdf"
+        type:
+          $ref: "#/components/schemas/SourceType"
+        owner:
+          $ref: "#/components/schemas/ObjectId"
+        version:
+          type: string
+          example: "2.0"
+        effectiveDate:
+          $ref: "#/components/schemas/ISODateTime"
+        expiryDate:
+          $ref: "#/components/schemas/ISODateTime"
+        status:
+          $ref: "#/components/schemas/SourceStatus"
+
+    SourceListResponse:
+      type: object
+      required: [data, total]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+        total:
+          type: integer
+          example: 12
+
+    PatchSourceRequest:
+      type: object
+      minProperties: 1
+      properties:
+        owner:
+          $ref: "#/components/schemas/ObjectId"
+        expiryDate:
+          $ref: "#/components/schemas/ISODateTime"
+        status:
+          $ref: "#/components/schemas/SourceStatus"
+
+    # ---- Drafts --------------------------------------------------------------
+    DraftStatus:
+      type: string
+      enum: [draft, checked, in-review, approved, published]
+
+    DraftFormat:
+      type: string
+      enum: [text, docx, pdf]
+
+    DraftIntent:
+      type: object
+      required: [purpose, audience, mustSay]
+      properties:
+        purpose:
+          type: string
+          example: "Promotional social post for existing customers"
+        audience:
+          type: string
+          example: "Existing UK customers aged 25-45"
+        mustSay:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          example: ["free returns", "time limit"]
+
+    Draft:
+      type: object
+      required: [_id, orgId, author, status, format, intent, createdAt, updatedAt]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        author:
+          $ref: "#/components/schemas/ObjectId"
+        status:
+          $ref: "#/components/schemas/DraftStatus"
+        format:
+          $ref: "#/components/schemas/DraftFormat"
+        intent:
+          $ref: "#/components/schemas/DraftIntent"
+        createdAt:
+          $ref: "#/components/schemas/ISODateTime"
+        updatedAt:
+          $ref: "#/components/schemas/ISODateTime"
+
+    DraftVersion:
+      type: object
+      required: [_id, draftId, orgId, versionNumber, contentHash, createdAt]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        draftId:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        versionNumber:
+          type: integer
+          example: 1
+        content:
+          type: string
+          example: "Free returns within 14 days."
+        contentHash:
+          type: string
+          description: SHA-256 hex digest of the content.
+          example: "a3f2c..."
+        diff:
+          type: string
+          description: Unified diff versus the previous version (empty for v1).
+        createdAt:
+          $ref: "#/components/schemas/ISODateTime"
+
+    ReviewResponse:
+      type: object
+      required: [jobId, draftId, status]
+      properties:
+        jobId:
+          type: string
+          example: "job_abc123"
+        draftId:
+          $ref: "#/components/schemas/ObjectId"
+        status:
+          type: string
+          enum: [queued, running, complete, failed]
+          example: "queued"
+        findingsCount:
+          type: integer
+          description: Populated when status=complete.
+
+    # ---- Findings ------------------------------------------------------------
+    Verdict:
+      type: string
+      enum: [Supported, Contradicted, Outdated, "Not Found", Unclear]
+
+    FindingType:
+      type: string
+      enum: [violation, question]
+
+    FindingStatus:
+      type: string
+      enum: [open, accepted, edited, dismissed, escalated]
+
+    MeaningCheck:
+      type: object
+      properties:
+        kept:
+          type: array
+          items:
+            type: string
+          example: ["free returns", "time limit"]
+        changed:
+          type: array
+          items:
+            type: string
+          example: ["14 days -> 30 days"]
+        dropped:
+          type: array
+          items:
+            type: string
+
+    Finding:
+      type: object
+      required: [_id, orgId, draftVersionId, span, type, verdict, confidence, status]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        draftVersionId:
+          $ref: "#/components/schemas/ObjectId"
+        span:
+          type: object
+          required: [start, end]
+          properties:
+            start:
+              type: integer
+              example: 0
+            end:
+              type: integer
+              example: 31
+        type:
+          $ref: "#/components/schemas/FindingType"
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.92
+        proofPassageId:
+          $ref: "#/components/schemas/ObjectId"
+        suggestedFix:
+          type: string
+          example: "Free returns within 30 days."
+        meaningCheck:
+          $ref: "#/components/schemas/MeaningCheck"
+        status:
+          $ref: "#/components/schemas/FindingStatus"
+        ruleId:
+          type: string
+          example: "rule.superlative.unqualified"
+
+    FindingsListResponse:
+      type: object
+      required: [data, total]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Finding"
+        total:
+          type: integer
+
+    PatchFindingRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [accept, edit, dismiss, escalate]
+          example: "accept"
+        editedText:
+          type: string
+          description: Required when action=edit.
+          example: "Free returns within 30 days."
+        reason:
+          type: string
+          description: Required when action=dismiss or escalate.
+
+    # ---- Comments ------------------------------------------------------------
+    CommentAction:
+      type: string
+      enum: [comment, approve, request-changes, override]
+
+    CommentThread:
+      type: object
+      required: [author, text, timestamp]
+      properties:
+        author:
+          $ref: "#/components/schemas/ObjectId"
+        text:
+          type: string
+          example: "This contradicts the UK returns policy — please fix."
+        timestamp:
+          $ref: "#/components/schemas/ISODateTime"
+
+    Comment:
+      type: object
+      required: [_id, orgId, draftId, action, thread, createdAt]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        draftId:
+          $ref: "#/components/schemas/ObjectId"
+        findingId:
+          $ref: "#/components/schemas/ObjectId"
+        thread:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommentThread"
+        action:
+          $ref: "#/components/schemas/CommentAction"
+        reason:
+          type: string
+          description: Required when action=override.
+        createdAt:
+          $ref: "#/components/schemas/ISODateTime"
+
+    AddCommentRequest:
+      type: object
+      required: [action, text]
+      properties:
+        findingId:
+          $ref: "#/components/schemas/ObjectId"
+        action:
+          $ref: "#/components/schemas/CommentAction"
+        text:
+          type: string
+          example: "Please check section 4.2 of the Returns Policy."
+        reason:
+          type: string
+          description: Required when action=override.
+
+    # ---- Facts ---------------------------------------------------------------
+    Fact:
+      type: object
+      required: [_id, orgId, statement, owner, expiryDate]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        statement:
+          type: string
+          example: "Returns are accepted within 30 days of purchase."
+        value:
+          type: string
+          example: "30 days"
+        evidenceLink:
+          $ref: "#/components/schemas/ObjectId"
+        owner:
+          $ref: "#/components/schemas/ObjectId"
+        expiryDate:
+          $ref: "#/components/schemas/ISODateTime"
+        supersedes:
+          $ref: "#/components/schemas/ObjectId"
+
+    CreateFactRequest:
+      type: object
+      required: [statement, owner, expiryDate]
+      properties:
+        statement:
+          type: string
+        value:
+          type: string
+        evidenceLink:
+          $ref: "#/components/schemas/ObjectId"
+        owner:
+          $ref: "#/components/schemas/ObjectId"
+        expiryDate:
+          $ref: "#/components/schemas/ISODateTime"
+        supersedes:
+          $ref: "#/components/schemas/ObjectId"
+
+    FactListResponse:
+      type: object
+      required: [data, total]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fact"
+        total:
+          type: integer
+
+    # ---- Brand Passport ------------------------------------------------------
+    Passport:
+      type: object
+      required: [_id, orgId, draftId, contentHash, checksRun, rulesVersion, approvers, aiUsed, timestamp]
+      properties:
+        _id:
+          $ref: "#/components/schemas/ObjectId"
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        draftId:
+          $ref: "#/components/schemas/ObjectId"
+        contentHash:
+          type: string
+          description: SHA-256 hex digest of the approved content.
+          example: "e3b0c44298fc1c149afbf4c8996fb924..."
+        checksRun:
+          type: array
+          items:
+            type: string
+          example: ["claim_match", "contradiction", "rules", "premortem"]
+        rulesVersion:
+          type: string
+          example: "v1.2"
+        approvers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ObjectId"
+        aiUsed:
+          type: boolean
+          example: true
+        timestamp:
+          $ref: "#/components/schemas/ISODateTime"
+
+    # ---- Insights ------------------------------------------------------------
+    RuleInsight:
+      type: object
+      required: [ruleId, overrideRate, totalTriggered]
+      properties:
+        ruleId:
+          type: string
+          example: "rule.superlative.unqualified"
+        description:
+          type: string
+          example: "Unqualified superlative detected"
+        overrideRate:
+          type: number
+          format: float
+          example: 0.35
+        totalTriggered:
+          type: integer
+          example: 40
+
+    MistakeInsight:
+      type: object
+      required: [category, count]
+      properties:
+        category:
+          type: string
+          example: "Contradicted temporal claim"
+        count:
+          type: integer
+          example: 12
+        topExample:
+          type: string
+          example: "Free returns within 14 days."
+
+    RulesInsightResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuleInsight"
+
+    MistakesInsightResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MistakeInsight"
+
+    # ---- Agent Gate (Phase 2) ------------------------------------------------
+    GateCheckRequest:
+      type: object
+      required: [content, orgId]
+      properties:
+        content:
+          type: string
+          example: "Enjoy unlimited free returns for 14 days."
+        orgId:
+          $ref: "#/components/schemas/ObjectId"
+        context:
+          type: object
+          additionalProperties: true
+
+    GateCheckResponse:
+      type: object
+      required: [allowed, findings]
+      properties:
+        allowed:
+          type: boolean
+          example: false
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Finding"
+        passportId:
+          $ref: "#/components/schemas/ObjectId"
+
+    # ---- ML Service schemas (internal) ---------------------------------------
+    MlClaim:
+      type: object
+      required: [text, type, span]
+      properties:
+        text:
+          type: string
+          example: "14 days"
+        type:
+          type: string
+          enum: [temporal, numerical, percentage, product-term, superlative, promotional, other]
+          example: temporal
+        span:
+          type: object
+          required: [start, end]
+          properties:
+            start:
+              type: integer
+              example: 24
+            end:
+              type: integer
+              example: 31
+
+    ExtractClaimsRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: Redacted draft text.
+          example: "Free returns within 14 days."
+        orgId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        intent:
+          $ref: "#/components/schemas/DraftIntent"
+
+    ExtractClaimsResponse:
+      type: object
+      required: [claims]
+      properties:
+        claims:
+          type: array
+          items:
+            $ref: "#/components/schemas/MlClaim"
+        message:
+          type: string
+
+    MlPassage:
+      type: object
+      required: [passageId, text, sourceId, page, score]
+      properties:
+        passageId:
+          $ref: "#/components/schemas/ObjectId"
+        text:
+          type: string
+          example: "Returns are accepted within 30 days of purchase."
+        sourceId:
+          $ref: "#/components/schemas/ObjectId"
+        page:
+          type: integer
+          example: 3
+        score:
+          type: number
+          format: float
+          example: 0.92
+
+    MlMatch:
+      type: object
+      required: [claim, passages, verdict, confidence]
+      properties:
+        claim:
+          $ref: "#/components/schemas/MlClaim"
+        passages:
+          type: array
+          items:
+            $ref: "#/components/schemas/MlPassage"
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          type: number
+          format: float
+          example: 0.92
+
+    MatchRequest:
+      type: object
+      required: [claims, orgId]
+      properties:
+        claims:
+          type: array
+          items:
+            $ref: "#/components/schemas/MlClaim"
+        orgId:
+          type: string
+        topK:
+          type: integer
+          default: 3
+
+    MatchResponse:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/MlMatch"
+        message:
+          type: string
+
+    RewriteRequest:
+      type: object
+      required: [claim, passages, intent]
+      properties:
+        claim:
+          $ref: "#/components/schemas/MlClaim"
+        passages:
+          type: array
+          items:
+            $ref: "#/components/schemas/MlPassage"
+        intent:
+          $ref: "#/components/schemas/DraftIntent"
+        originalText:
+          type: string
+          example: "Free returns within 14 days."
+
+    RewriteResponse:
+      type: object
+      required: [suggestedFix]
+      properties:
+        suggestedFix:
+          type: string
+          example: "Free returns within 30 days."
+        meaningCheck:
+          $ref: "#/components/schemas/MeaningCheck"
+        message:
+          type: string
+
+    PremortemRisk:
+      type: object
+      required: [viewpoint, riskLine, severity]
+      properties:
+        viewpoint:
+          type: string
+          enum: [regulatory, brand, customer, competitor]
+          example: regulatory
+        riskLine:
+          type: string
+          example: "Claim '14 days' contradicts mandatory 30-day cooling-off period."
+        severity:
+          type: string
+          enum: [high, medium, low]
+          example: high
+
+    PremortemRequest:
+      type: object
+      required: [content, findings]
+      properties:
+        content:
+          type: string
+          description: Redacted draft full text.
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Finding"
+        intent:
+          $ref: "#/components/schemas/DraftIntent"
+
+    PremortemResponse:
+      type: object
+      required: [risks]
+      properties:
+        risks:
+          type: array
+          items:
+            $ref: "#/components/schemas/PremortemRisk"
+        highestRiskLine:
+          type: string
+        message:
+          type: string
+
+    ImageCheckRequest:
+      type: object
+      required: [storageRef, orgId]
+      properties:
+        storageRef:
+          type: string
+          example: "sources/507f1f77bcf86cd799439011/banner.png"
+        orgId:
+          type: string
+
+    ImageCheckResult:
+      type: object
+      required: [checkType, passed]
+      properties:
+        checkType:
+          type: string
+          enum: [contrast, palette, alt-text]
+          example: contrast
+        passed:
+          type: boolean
+          example: false
+        details:
+          type: string
+          example: "Contrast ratio 2.5:1 is below WCAG AA minimum of 4.5:1"
+        wcagLevel:
+          type: string
+          enum: [A, AA, AAA]
+
+    ImageCheckResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageCheckResult"
+        message:
+          type: string
+
+    MlEntity:
+      type: object
+      required: [text, type, isWatchlisted]
+      properties:
+        text:
+          type: string
+          example: "Project Aurora"
+        type:
+          type: string
+          enum: [product, competitor, person, place, legal-term, embargoed, other]
+          example: embargoed
+        isWatchlisted:
+          type: boolean
+          example: true
+        span:
+          type: object
+          properties:
+            start:
+              type: integer
+            end:
+              type: integer
+
+    DetectEntitiesRequest:
+      type: object
+      required: [content, orgId]
+      properties:
+        content:
+          type: string
+        orgId:
+          type: string
+        watchlist:
+          type: array
+          items:
+            type: string
+          description: Org-specific embargoed terms.
+
+    DetectEntitiesResponse:
+      type: object
+      required: [entities]
+      properties:
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/MlEntity"
+        watchlistHits:
+          type: integer
+        message:
+          type: string
+
+# ==============================================================================
+# PATHS
+# ==============================================================================
+paths:
+
+  # System — Backend
+  /health:
+    get:
+      tags: [System]
+      summary: Backend health check
+      operationId: backendHealthCheck
+      responses:
+        "200":
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: brandguard-api
+                  timestamp:
+                    $ref: "#/components/schemas/ISODateTime"
+
+  /:
+    get:
+      tags: [System]
+      summary: Backend root info
+      operationId: backendRoot
+      responses:
+        "200":
+          description: API metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: BrandGuard Preflight API
+                  version:
+                    type: string
+                    example: 1.0.0
+                  status:
+                    type: string
+                    example: running
+
+  # Auth
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate and receive JWT
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get authenticated user profile
+      operationId: getMe
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # Sources
+  /v1/sources:
+    get:
+      tags: [Sources]
+      summary: List organisation sources
+      operationId: listSources
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/SourceType"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/SourceStatus"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated sources.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Sources]
+      summary: Upload a new source document
+      description: |
+        Uploads PDF / DOCX / Markdown to MinIO, triggers parsing + embedding.
+        Max size: 10 MB. Only org owners may upload.
+      operationId: uploadSource
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, type, version, effectiveDate, expiryDate]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                type:
+                  $ref: "#/components/schemas/SourceType"
+                version:
+                  type: string
+                  example: "2.0"
+                effectiveDate:
+                  type: string
+                  format: date
+                  example: "2026-01-01"
+                expiryDate:
+                  type: string
+                  format: date
+                  example: "2027-03-31"
+      responses:
+        "201":
+          description: Source created; indexing queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "400":
+          description: Invalid file type / size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/sources/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    get:
+      tags: [Sources]
+      summary: Get a source by ID
+      operationId: getSource
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Source record.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [Sources]
+      summary: Update source owner, expiry, or status
+      operationId: patchSource
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchSourceRequest"
+      responses:
+        "200":
+          description: Updated source.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Source"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # Drafts
+  /v1/drafts:
+    post:
+      tags: [Drafts]
+      summary: Submit a new draft with intent form
+      description: |
+        Accepts a file upload (DOCX/PDF) or `content` text field. Intent fields
+        are required. Confidential-term tripwire runs synchronously on submission.
+      operationId: createDraft
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [purpose, audience, mustSay]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: DOCX or PDF. Mutually exclusive with `content`.
+                content:
+                  type: string
+                  description: Plain-text draft. Mutually exclusive with `file`.
+                purpose:
+                  type: string
+                  example: "Promotional social post"
+                audience:
+                  type: string
+                  example: "Existing UK customers"
+                mustSay:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: Draft created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Draft"
+        "400":
+          description: Missing intent, invalid file, or tripwire triggered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/drafts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    get:
+      tags: [Drafts]
+      summary: Get draft metadata and status
+      operationId: getDraft
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Draft object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Draft"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/drafts/{id}/review:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    post:
+      tags: [Drafts]
+      summary: Trigger the ML review pipeline
+      description: |
+        Orchestrates: redaction → extract-claims → match → rewrite → premortem.
+        Persists Pydantic-validated findings. Updates draft status to `checked`.
+      operationId: reviewDraft
+      security:
+        - BearerAuth: []
+      responses:
+        "202":
+          description: Review accepted / queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Review already in progress.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/drafts/{id}/versions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    get:
+      tags: [Drafts]
+      summary: List all draft versions with diffs
+      operationId: getDraftVersions
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Version list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DraftVersion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/drafts/{id}/findings:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    get:
+      tags: [Drafts]
+      summary: Get evidence-card findings for the latest reviewed version
+      operationId: getDraftFindings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/FindingStatus"
+        - name: verdict
+          in: query
+          schema:
+            $ref: "#/components/schemas/Verdict"
+      responses:
+        "200":
+          description: Findings list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindingsListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/drafts/{id}/comments:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    post:
+      tags: [Collaboration]
+      summary: Add a threaded comment or approval action
+      operationId: addComment
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCommentRequest"
+      responses:
+        "201":
+          description: Comment created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          description: Missing required fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/drafts/{id}/approve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    post:
+      tags: [Collaboration]
+      summary: Approve draft and generate Brand Passport
+      description: |
+        Manager only. Sets status → `approved`, calls passportBuilder,
+        emits AuditLog event `passport_created`.
+      operationId: approveDraft
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Draft approved; passport returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  draft:
+                    $ref: "#/components/schemas/Draft"
+                  passport:
+                    $ref: "#/components/schemas/Passport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Open findings must be resolved before approval.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/drafts/{id}/request-changes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    post:
+      tags: [Collaboration]
+      summary: Send draft back to creator for revision
+      operationId: requestDraftChanges
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  example: "Please correct the return period claim before resubmitting."
+      responses:
+        "200":
+          description: Draft returned for revision.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Draft"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # Findings
+  /v1/findings/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    patch:
+      tags: [Findings]
+      summary: Accept, edit, dismiss, or escalate a finding
+      description: |
+        Creators: accept / edit / dismiss. Managers: also escalate.
+        Dismiss requires written `reason`. Accepted finding with edit
+        creates a new DraftVersion with SHA-256 hash.
+      operationId: patchFinding
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchFindingRequest"
+      responses:
+        "200":
+          description: Updated finding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Finding"
+        "400":
+          description: Invalid action or missing fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # Facts
+  /v1/facts:
+    get:
+      tags: [Facts]
+      summary: List approved facts for the organisation
+      operationId: listFacts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated facts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Facts]
+      summary: Add an approved fact with owner and expiry
+      description: Owner role required.
+      operationId: createFact
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFactRequest"
+      responses:
+        "201":
+          description: Fact created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Fact"
+        "400":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # Brand Passport (read-only; append-only collection — no PATCH or DELETE)
+  /v1/passports/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    get:
+      tags: [Passport]
+      summary: Retrieve a Brand Passport by ID
+      description: |
+        Append-only — no mutation endpoints exist.
+        Verify tamper-integrity by re-hashing approved content and comparing
+        to `contentHash`.
+      operationId: getPassport
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Brand Passport.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Passport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # Insights
+  /v1/insights/rules:
+    get:
+      tags: [Insights]
+      summary: Rules ranked by override rate (Guideline Debugger)
+      operationId: getRuleInsights
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Rule insights.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RulesInsightResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/insights/mistakes:
+    get:
+      tags: [Insights]
+      summary: Most repeated mistake categories
+      operationId: getMistakeInsights
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Mistake insights.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MistakesInsightResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  # Agent Gate — Phase 2
+  /v1/gate/check:
+    post:
+      tags: [Agent Gate]
+      summary: Pre-publication compliance gate for external AI tools
+      description: |
+        External tools call this before publishing. Runs full review pipeline.
+        Auth: `X-Gate-Api-Key` header.
+      operationId: gateCheck
+      security:
+        - GateApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GateCheckRequest"
+      responses:
+        "200":
+          description: Gate verdict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateCheckResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ML Service — Internal endpoints (backend → ml_service only)
+  /extract-claims:
+    post:
+      tags: [ML Service — Internal]
+      summary: Extract checkable claims from redacted draft text
+      description: "**Internal only** — backend proxy; browser must not call directly."
+      operationId: mlExtractClaims
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtractClaimsRequest"
+      responses:
+        "200":
+          description: Extracted claims.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractClaimsResponse"
+        "422":
+          description: Pydantic validation error — backend discards response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /match:
+    post:
+      tags: [ML Service — Internal]
+      summary: Retrieve proof passages and NLI verdict for each claim
+      description: "**Internal only.** FAISS/Chroma retrieval + cross-encoder NLI."
+      operationId: mlMatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MatchRequest"
+      responses:
+        "200":
+          description: Match results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchResponse"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rewrite:
+    post:
+      tags: [ML Service — Internal]
+      summary: Generate suggested fix for a contradicted or unclear claim
+      description: "**Internal only.** Fix constrained to proof passages + intent must-say list."
+      operationId: mlRewrite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewriteRequest"
+      responses:
+        "200":
+          description: Suggested fix with meaning check.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RewriteResponse"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /premortem:
+    post:
+      tags: [ML Service — Internal]
+      summary: 4-viewpoint pre-mortem risk analysis
+      description: "**Internal only.** Viewpoints: regulatory, brand, customer, competitor."
+      operationId: mlPremortem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PremortemRequest"
+      responses:
+        "200":
+          description: Pre-mortem report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PremortemResponse"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /image-check:
+    post:
+      tags: [ML Service — Internal]
+      summary: Image brand/accessibility compliance analysis
+      description: "**Internal only.** WCAG contrast, palette, alt-text via OpenCV."
+      operationId: mlImageCheck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageCheckRequest"
+      responses:
+        "200":
+          description: Image compliance results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageCheckResponse"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /detect-entities:
+    post:
+      tags: [ML Service — Internal]
+      summary: Detect named entities and flag watchlisted terms
+      description: "**Internal only.** Run before redaction gateway to identify scrub candidates."
+      operationId: mlDetectEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DetectEntitiesRequest"
+      responses:
+        "200":
+          description: Entity detection results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectEntitiesResponse"
+        "422":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+# ==============================================================================
+# TAGS (display order)
+# ==============================================================================
+tags:
+  - name: System
+    description: Health and meta endpoints
+  - name: Auth
+    description: JWT authentication — login and profile
+  - name: Sources
+    description: Knowledge base source document management
+  - name: Drafts
+    description: Draft submission, review pipeline, version history
+  - name: Findings
+    description: Evidence card lifecycle — accept, edit, dismiss, escalate
+  - name: Collaboration
+    description: Threaded comments, approvals, and change requests
+  - name: Facts
+    description: Org-approved facts with owner and expiry (Claim Shelf-Life)
+  - name: Passport
+    description: Brand Passport — tamper-evident approval record (read-only, append-only)
+  - name: Insights
+    description: Guideline Debugger and mistake analytics
+  - name: Agent Gate
+    description: "Phase 2: external AI tool pre-publication gate"
+  - name: ML Service — Internal
+    description: |
+      FastAPI endpoints. Called by the Node.js backend only — never from the
+      browser. All content is redacted before dispatch.
