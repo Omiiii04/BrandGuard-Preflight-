@@ -9,7 +9,17 @@
 
 const mongoose = require('mongoose');
 
-const ROLES = ['admin', 'editor', 'reviewer', 'viewer'];
+const ROLES = [
+  'admin',
+  'editor',
+  'reviewer',
+  'viewer',
+  'creator',
+  'brand_manager',
+  'manager',
+  'knowledge_owner',
+  'authorised_reviewer',
+];
 
 const userSchema = new mongoose.Schema(
   {

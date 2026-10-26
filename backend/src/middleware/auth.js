@@ -101,40 +101,8 @@ async function authenticate(req, res, next) {
   return next();
 }
 
-/**
- * requireRole — factory that returns an `authenticate`-dependent middleware
- * which enforces a minimum RBAC role.
- *
- * Role order (ascending privilege):
- *   viewer → reviewer → editor → admin
- *
- * Usage:
- *   router.delete('/asset/:id', authenticate, requireRole('admin'), handler);
- *
- * @param {...string} allowedRoles - One or more roles that may pass.
- * @returns {import('express').RequestHandler}
- */
-const ROLE_RANK = { viewer: 0, reviewer: 1, editor: 2, admin: 3 };
-
-function requireRole(...allowedRoles) {
-  return function roleGuard(req, res, next) {
-    if (!req.user) {
-      // authenticate must run first.
-      return res.status(401).json({ success: false, error: 'Not authenticated.' });
-    }
-
-    const userRank    = ROLE_RANK[req.user.role] ?? -1;
-    const minRequired = Math.min(...allowedRoles.map((r) => ROLE_RANK[r] ?? Infinity));
-
-    if (userRank < minRequired) {
-      return res.status(403).json({
-        success: false,
-        error: `Insufficient privileges. Required: ${allowedRoles.join(' or ')}.`,
-      });
-    }
-
-    return next();
-  };
-}
+const { requireRole, ROLE_HIERARCHY } = require('./rbac');
+const ROLE_RANK = ROLE_HIERARCHY;
 
 module.exports = { authenticate, requireRole, ROLE_RANK };
+

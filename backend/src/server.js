@@ -49,20 +49,11 @@ app.get('/', (_req, res) => {
 const sourcesRouter = require('./routes/sources');
 app.use('/v1/sources', sourcesRouter);
 
-// ── 404 catch-all ───────────────────────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ success: false, error: 'Route not found.' });
-});
+// ── Error handling middleware ────────────────────────────────────────────────
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+app.use(notFoundHandler);
+app.use(errorHandler);
 
-// ── Global error handler ─────────────────────────────────────────────────────
-// eslint-disable-next-line no-unused-vars
-app.use((err, _req, res, _next) => {
-  console.error('[server] Unhandled error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    error:   process.env.NODE_ENV === 'production' ? 'Internal server error.' : err.message,
-  });
-});
 
 // ── Startup ──────────────────────────────────────────────────────────────────
 async function start() {
@@ -72,6 +63,13 @@ async function start() {
 
     console.log('[server] Bootstrapping MinIO bucket…');
     await ensureBucket();
+
+    // Start background shelf-life warning scheduler
+    const { startShelfLifeScheduler } = require('./services/shelfLifeScheduler');
+    if (process.env.NODE_ENV !== 'test') {
+      startShelfLifeScheduler();
+    }
+
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`[server] BrandGuard API listening on port ${PORT} (${process.env.NODE_ENV || 'development'})`);

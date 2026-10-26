@@ -1,0 +1,121 @@
+/**
+ * shelfLifeScheduler.test.js — Unit and logic tests for shelfLifeScheduler.
+ */
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const mongoose = require('mongoose');
+
+const Source = require('../src/models/Source');
+const {
+  checkExpiringItems,
+  startShelfLifeScheduler,
+  stopShelfLifeScheduler,
+  getSchedulerStatus,
+} = require('../src/services/shelfLifeScheduler');
+
+describe('shelfLifeScheduler Service', () => {
+  const mockOrgId = new mongoose.Types.ObjectId();
+  const mockUserId = new mongoose.Types.ObjectId();
+
+  describe('checkExpiringItems() logic', () => {
+    it('generates expiry_warning for items expiring within 30 days and marks past items as expired', async () => {
+      const now = new Date('2026-10-27T00:00:00Z');
+
+      // Candidate 1: Expiring in 10 days
+      const expiringSoonSource = {
+        _id: new mongoose.Types.ObjectId(),
+        orgId: mockOrgId,
+        owner: mockUserId,
+        fileName: 'policy_2026.pdf',
+        expiryDate: new Date('2026-11-06T00:00:00Z'),
+        status: 'ready',
+      };
+
+      // Candidate 2: Already expired 2 days ago
+      const expiredSource = {
+        _id: new mongoose.Types.ObjectId(),
+        orgId: mockOrgId,
+        owner: mockUserId,
+        fileName: 'old_contract.docx',
+        expiryDate: new Date('2026-10-25T00:00:00Z'),
+        status: 'ready',
+      };
+
+      // Stub Source.find and AuditLog.prototype.save
+      const AuditLog = require('../src/models/AuditLog');
+      const originalFind = Source.find;
+      const originalUpdateOne = Source.updateOne;
+      const originalAuditSave = AuditLog.prototype.save;
+
+      let updatedId = null;
+      let updatedStatus = null;
+      const savedAuditEvents = [];
+
+      AuditLog.prototype.save = async function () {
+        savedAuditEvents.push(this.toObject());
+        return this;
+      };
+
+      Source.find = function () {
+        return {
+          lean: async function () {
+            return [expiringSoonSource, expiredSource];
+          },
+        };
+      };
+
+      Source.updateOne = async function (filter, update) {
+
+        updatedId = filter._id;
+        updatedStatus = update.$set.status;
+        return { modifiedCount: 1 };
+      };
+
+      try {
+        const results = await checkExpiringItems({ now, warningDays: 30 });
+
+        assert.equal(results.warningsGenerated, 1);
+        assert.equal(results.expiredCount, 1);
+        assert.equal(results.details.length, 2);
+
+        // Verify expiring soon entry
+        const warningItem = results.details.find((d) => d.status === 'expiring_soon');
+        assert.ok(warningItem);
+        assert.equal(warningItem.fileName, 'policy_2026.pdf');
+        assert.equal(warningItem.daysRemaining, 10);
+
+        // Verify expired entry and DB update
+        const expiredItem = results.details.find((d) => d.status === 'expired');
+        assert.ok(expiredItem);
+        assert.equal(expiredItem.fileName, 'old_contract.docx');
+        assert.deepEqual(updatedId, expiredSource._id);
+        assert.equal(updatedStatus, 'expired');
+
+        // Verify AuditLog events recorded
+        assert.equal(savedAuditEvents.length, 2);
+        assert.ok(savedAuditEvents.some((e) => e.eventType === 'expiry_warning'));
+        assert.ok(savedAuditEvents.some((e) => e.eventType === 'source_expired'));
+      } finally {
+        Source.find = originalFind;
+        Source.updateOne = originalUpdateOne;
+        AuditLog.prototype.save = originalAuditSave;
+      }
+
+    });
+  });
+
+  describe('Scheduler lifecycle (start, stop, status)', () => {
+    it('manages cron lifecycle properly', () => {
+      stopShelfLifeScheduler();
+      assert.equal(getSchedulerStatus().running, false);
+
+      const task = startShelfLifeScheduler('0 0 * * *');
+      assert.ok(task);
+      assert.equal(getSchedulerStatus().running, true);
+
+      stopShelfLifeScheduler();
+      assert.equal(getSchedulerStatus().running, false);
+    });
+  });
+});
