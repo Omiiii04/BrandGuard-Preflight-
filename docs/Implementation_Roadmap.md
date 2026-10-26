@@ -1,8 +1,8 @@
 # Implementation Roadmap
 ## BrandGuard Preflight — Codex 48 Hackathon (40-Hour Sprint)
-### 10 Blocks x 4 Hours Each | Judging-Criteria Aligned
+### 10 Blocks x 4 Hours Each | Judging-Criteria Aligned | Commit-Wise Task Breakdown
 
-> Version: 3.0 | Date: 26 October 2026
+> Version: 4.0 | Date: 26 October 2026
 > Team: Somnath (S) — Backend/Lead | Falguni (F) — Frontend | Om (O) — AI/ML
 
 ---
@@ -20,6 +20,14 @@ Stage breakdown:
 
 Cut rule: If time runs short, drop features from the bottom of the priority table.
 Must-priority rows alone cover all 5 judging criteria.
+
+### Commit Message Convention
+```
+[BLOCK-N][WHO] short description
+
+Who prefixes:  S = Somnath | F = Falguni | O = Om
+```
+Example: `[BLOCK-1][S] add docker-compose with 5 services`
 
 ---
 
@@ -39,6 +47,38 @@ Must-priority rows alone cover all 5 judging criteria.
 
 **Block 1 exit:** Docker Compose starts. Vite dev server runs. All 6 ML stubs return valid mock JSON. OpenAPI contract agreed and frozen.
 
+#### Commits — Block 1
+
+**Somnath**
+```
+[BLOCK-1][S] init repo structure: frontend/ backend/ ml_service/ docs/
+[BLOCK-1][S] add docker-compose with 5 services (web, api, ml, mongo, minio)
+[BLOCK-1][S] add .env.example with all required env vars
+[BLOCK-1][S] add openapi.yaml — full OpenAPI 3.1 contract (all endpoints + schemas)
+[BLOCK-1][S] add MongoDB connection and MinIO client setup
+[BLOCK-1][S] add auth.js middleware (JWT verify, req.user injection)
+[BLOCK-1][S] add orgIsolation.js middleware
+```
+
+**Falguni**
+```
+[BLOCK-1][F] bootstrap React + Vite project, install all dependencies
+[BLOCK-1][F] scaffold src/ folder structure (pages, components, context, api, utils)
+[BLOCK-1][F] add index.css design tokens (HSL palette, spacing scale, Inter font)
+[BLOCK-1][F] build Sidebar.jsx and TopBar.jsx layout shell
+[BLOCK-1][F] add React Router with placeholder routes for all 7 pages
+[BLOCK-1][F] build LoginPage.jsx with form validation
+[BLOCK-1][F] add AuthContext.jsx, OrgContext.jsx, and role-aware navigation
+```
+
+**Om**
+```
+[BLOCK-1][O] add Stellara Brands synthetic dataset (PDFs, DOCXs, blog posts, returns policy)
+[BLOCK-1][O] scaffold test_set.json with annotated expected findings
+[BLOCK-1][O] init FastAPI project with all requirements installed
+[BLOCK-1][O] stub all 6 ML endpoints with mock responses matching OpenAPI schemas
+```
+
 ---
 
 ### BLOCK 2 (Hours 4–8) + Stage 1 Sync at Hour 10
@@ -51,6 +91,39 @@ Must-priority rows alone cover all 5 judging criteria.
 | **O** | Build parser.py: PyMuPDF for PDF (text + page positions), python-docx for DOCX, Tesseract OCR for images. Test against all Stellara Brands synthetic documents. Build embedder.py: load sentence-transformers model, create FAISS index from parsed passages, store passages in MongoDB with embeddingRef. Build retriever.py: k-NN lookup filtered by orgId and expiry. Index all Stellara Brands synthetic sources. |
 
 **Block 2 exit:** Source upload returns 201. File appears in MinIO. Passages indexed. Retriever returns top-3 passages for a test claim.
+
+#### Commits — Block 2
+
+**Somnath**
+```
+[BLOCK-2][S] add POST /v1/sources with uploadScan.js middleware (type allow-list, 10 MB cap)
+[BLOCK-2][S] integrate MinIO upload for source files
+[BLOCK-2][S] save Source document to MongoDB (owner, version, expiryDate fields)
+[BLOCK-2][S] add GET /v1/sources and GET /v1/sources/:id
+[BLOCK-2][S] add rbac.js middleware with requireRole factory
+[BLOCK-2][S] add errorHandler.js with structured JSON error responses
+[BLOCK-2][S] add shelfLifeScheduler.js (node-cron daily expiry warning)
+[BLOCK-2][S] add auditLogger.js (append-only event creator)
+```
+
+**Falguni**
+```
+[BLOCK-2][F] build KnowledgeBasePage.jsx with SourceUploader (drag-and-drop)
+[BLOCK-2][F] add SourceList.jsx and SourceCard.jsx (owner, version, expiry, status badges)
+[BLOCK-2][F] wire KnowledgeBasePage to GET /v1/sources API
+[BLOCK-2][F] build DraftSubmitPage.jsx with FileUploadZone and TextPasteEditor
+[BLOCK-2][F] add IntentForm.jsx (purpose, audience, must-say[] repeatable inputs)
+```
+
+**Om**
+```
+[BLOCK-2][O] build parser.py (PyMuPDF PDF, python-docx DOCX, Tesseract OCR)
+[BLOCK-2][O] test parser against all Stellara Brands synthetic documents
+[BLOCK-2][O] build embedder.py (sentence-transformers + FAISS index creation)
+[BLOCK-2][O] store passages in MongoDB with embeddingRef field
+[BLOCK-2][O] build retriever.py (k-NN lookup filtered by orgId and expiry)
+[BLOCK-2][O] index all Stellara Brands synthetic sources into FAISS
+```
 
 **Stage 1 Sync (10 min at Hour 10):** Each person demos deliverables. Confirm contract frozen. Mock any missing dependencies for Stage 2.
 
@@ -72,6 +145,37 @@ Must-priority rows alone cover all 5 judging criteria.
 
 **Block 3 exit:** Draft submission works. Claim extractor finds "14 days" and "best returns in India". Stage 1 judge flags the superlative. EvidenceCard renders all 5 verdict types with mock data.
 
+#### Commits — Block 3
+
+**Somnath**
+```
+[BLOCK-3][S] add POST /v1/drafts (multipart, SHA-256 contentHash, DraftVersion save)
+[BLOCK-3][S] write AuditLog event: draft_submitted
+[BLOCK-3][S] add redactionGateway.js (watchlist replace with [REDACTED], log redacted items)
+[BLOCK-3][S] add mlOrchestrator.js (HTTP POST to /extract-claims, timeout + schema validation)
+[BLOCK-3][S] add POST /v1/drafts/:id/review (orchestrate ML, save Findings, audit review_completed)
+```
+
+**Falguni**
+```
+[BLOCK-3][F] build ReviewPage.jsx skeleton with DraftViewer and FindingsSidebar
+[BLOCK-3][F] add loading and empty states to FindingsSidebar
+[BLOCK-3][F] build EvidenceCard.jsx with DraftSpanHighlight and ProofPassagePanel (mock data)
+[BLOCK-3][F] add VerdictBadge (5 types) and ConfidenceBar to EvidenceCard
+[BLOCK-3][F] add SuggestedFix (editable textarea) and MeaningCheck (kept/changed/dropped) to EvidenceCard
+[BLOCK-3][F] add ActionButtons (Accept, Edit, Dismiss, Ask Owner) to EvidenceCard
+[BLOCK-3][F] build ComparisonView.jsx (two-column draft vs source passage)
+```
+
+**Om**
+```
+[BLOCK-3][O] build claim_extractor.py (regex + keywords: numbers, dates, superlatives, promos)
+[BLOCK-3][O] test claim_extractor against Stellara Brands returns-policy draft
+[BLOCK-3][O] build judge.py Stage 1: banned terms, superlatives, alt-text (confidence 1.0)
+[BLOCK-3][O] verify "best returns in India" flagged as Violated
+[BLOCK-3][O] add Pydantic schema models in schemas/responses.py for all 6 ML endpoints
+```
+
 ---
 
 ### BLOCK 4 (Hours 14–18)
@@ -85,6 +189,39 @@ Must-priority rows alone cover all 5 judging criteria.
 
 **Block 4 exit:** NLI returns Contradicted for the core demo scenario. Live evidence cards display in UI. Accept/dismiss work end-to-end. Suggested fix + meaning check display real ML data.
 
+#### Commits — Block 4
+
+**Somnath**
+```
+[BLOCK-4][S] add GET /v1/drafts/:id/findings (orgId-scoped, paginated)
+[BLOCK-4][S] add PATCH /v1/findings/:id (accept/edit/dismiss, status transition validation)
+[BLOCK-4][S] write AuditLog event: finding_actioned
+[BLOCK-4][S] add POST /v1/facts (approved fact with owner + expiry)
+[BLOCK-4][S] add server-side ML response schema validation (discard + audit ml_response_discarded)
+[BLOCK-4][S] run integration check: draft → claim → passage → NLI → finding → UI card
+```
+
+**Falguni**
+```
+[BLOCK-4][F] wire EvidenceCard to live findings API (replace mock data)
+[BLOCK-4][F] render all 5 verdict types with correct colours from live data
+[BLOCK-4][F] wire Accept/Edit/Dismiss buttons to PATCH /v1/findings/:id
+[BLOCK-4][F] add success/error toast notifications on finding action
+[BLOCK-4][F] build SuggestedFix.jsx (editable textarea pre-filled by ML suggested fix)
+[BLOCK-4][F] build MeaningCheck.jsx (kept = green, changed = amber, dropped = red)
+[BLOCK-4][F] integrate SuggestedFix and MeaningCheck into EvidenceCard with real ML data
+```
+
+**Om**
+```
+[BLOCK-4][O] build judge.py Stage 2 (NLI entailment with nli-deberta-v3-base)
+[BLOCK-4][O] map NLI outputs: entails→Supported, contradicts→Contradicted, neutral→Unclear
+[BLOCK-4][O] add Outdated override (expiryDate < today) and Not Found (no passage) logic
+[BLOCK-4][O] verify "14 days" vs 30-day policy returns Contradicted ~0.90 confidence
+[BLOCK-4][O] build rewriter.py (LM prompt constrained to passages + must-say list)
+[BLOCK-4][O] build meaning_check.py (compare must-say points to fix: kept/changed/dropped)
+```
+
 ---
 
 ### BLOCK 5 (Hours 18–22) + Stage 2 Sync at Hour 20
@@ -97,6 +234,37 @@ Must-priority rows alone cover all 5 judging criteria.
 | **O** | Build entities.py (/detect-entities): spaCy NER + org watchlist pattern matching; identify embargoed product names, client names, confidential terms. Test: correctly identifies Stellara Brands embargoed product "Project Nova". Tune all Pydantic schemas in schemas/responses.py. Verify non-conforming outputs are discarded not propagated. |
 
 **Block 5 exit:** Comments and approvals work with RBAC. Insights endpoints return data. Pre-mortem panel renders.
+
+#### Commits — Block 5
+
+**Somnath**
+```
+[BLOCK-5][S] add POST /v1/drafts/:id/comments (threaded, orgId-scoped, AuditLog)
+[BLOCK-5][S] add GET /v1/drafts/:id/comments
+[BLOCK-5][S] add POST /v1/drafts/:id/approve (manager RBAC, new DraftVersion, audit draft_approved)
+[BLOCK-5][S] add POST /v1/drafts/:id/request-changes (manager RBAC, audit changes_requested)
+[BLOCK-5][S] add insightsAggregator.js (per-rule flag counts, override counts, time-to-approval)
+[BLOCK-5][S] expose GET /v1/insights/rules and GET /v1/insights/mistakes
+```
+
+**Falguni**
+```
+[BLOCK-5][F] build WorkflowPage.jsx skeleton
+[BLOCK-5][F] add CommentThread.jsx and CommentInput.jsx (wired to comments API)
+[BLOCK-5][F] build ApprovalControls.jsx (Approve, Request Changes, Override buttons)
+[BLOCK-5][F] add OverrideReasonModal.jsx (required textarea, blocked submit if empty)
+[BLOCK-5][F] wire ApprovalControls and OverrideReasonModal to approval endpoints
+[BLOCK-5][F] build PreMortemPanel.jsx (highest-risk line + viewpoint + reason)
+[BLOCK-5][F] integrate PreMortemPanel into ReviewPage
+```
+
+**Om**
+```
+[BLOCK-5][O] build entities.py /detect-entities (spaCy NER + org watchlist pattern match)
+[BLOCK-5][O] test entity detection: verify "Project Nova" flagged as embargoed
+[BLOCK-5][O] tune all Pydantic schemas in schemas/responses.py
+[BLOCK-5][O] verify non-conforming ML outputs are discarded, not propagated
+```
 
 **Stage 2 Sync (10 min at Hour 20):** Live demo — draft submitted → findings visible as evidence cards → creator accepts returns-policy fix. Confirm Stage 2 exit check passed. Plan Stage 3.
 
@@ -118,6 +286,37 @@ Must-priority rows alone cover all 5 judging criteria.
 
 **Block 6 exit:** Brand Passport created on approval and verifiable. Version timeline and diff view render. Pre-mortem returns correct highest-risk line for demo scenario. Past-content contradiction detected.
 
+#### Commits — Block 6
+
+**Somnath**
+```
+[BLOCK-6][S] build passportBuilder.js (SHA-256, checksRun, rulesVersion, approvers, aiUsed)
+[BLOCK-6][S] create append-only passports collection (no PATCH/DELETE routes)
+[BLOCK-6][S] add GET /v1/passports/:id
+[BLOCK-6][S] build versionManager.js (DraftVersion on accepted fix, contentHash, text diff)
+[BLOCK-6][S] add GET /v1/drafts/:id/versions
+[BLOCK-6][S] add Claim Shelf-Life logic in workflowEngine.js (Outdated verdict for expired passages)
+```
+
+**Falguni**
+```
+[BLOCK-6][F] build PassportPage.jsx with PassportDetails.jsx (hash, checks, approvers, aiUsed badge)
+[BLOCK-6][F] add TamperCheck.jsx (recompute SHA-256, show Verified/Tampered badge)
+[BLOCK-6][F] build VersionTimeline.jsx (chronological versions with status badge, author, timestamp)
+[BLOCK-6][F] build DiffView.jsx (line-by-line diff: additions green, deletions red)
+[BLOCK-6][F] wire VersionTimeline and DiffView to GET /v1/drafts/:id/versions
+[BLOCK-6][F] add AIUseNotice.jsx into TopBar (always visible on LM-triggered reviews)
+```
+
+**Om**
+```
+[BLOCK-6][O] build premortem_engine.py (4 LM prompts: regulator, journalist, competitor, screen-reader)
+[BLOCK-6][O] return highest-risk line across all 4 viewpoints with riskiest_span validation
+[BLOCK-6][O] test premortem: "best returns in India" surfaces regulator viewpoint
+[BLOCK-6][O] index all 5 past approved blog posts with sourceType = past_content
+[BLOCK-6][O] verify contradiction check: new draft contradicting old post is detected
+```
+
 ---
 
 ### BLOCK 7 (Hours 26–30) + Stage 3 Sync at Hour 30
@@ -130,6 +329,33 @@ Must-priority rows alone cover all 5 judging criteria.
 | **O** | Run full demo story end-to-end through ML pipeline: Priya submits draft with 3 seeded issues (returns-policy contradiction + unsupported superlative + expired fact). Verify all 3 findings are returned with correct verdicts and proofPassageIds. Verify fix generation and meaning check work for all 3. Verify past-content contradiction is caught. Document any gaps to fix before Block 8. |
 
 **Block 7 exit:** Dashboard shows live metrics. Guideline Debugger has data. Redaction preview works. Full ML demo story verified for all 3 seeded issues.
+
+#### Commits — Block 7
+
+**Somnath**
+```
+[BLOCK-7][S] build Guideline Debugger logic (override rate >50%, /rewrite suggestion, expose in rules endpoint)
+[BLOCK-7][S] add redaction preview endpoint (preview redacted content before ML call)
+[BLOCK-7][S] add rules-only mode (skip LM calls when org.rules_only = true)
+```
+
+**Falguni**
+```
+[BLOCK-7][F] build DashboardPage.jsx with OrgMetricsCard (drafts, avg time, findings, citation rate)
+[BLOCK-7][F] add RecentDraftsTable.jsx (status badge, owner, last updated, link to ReviewPage)
+[BLOCK-7][F] build InsightsPanel.jsx with RepeatMistakesChart (top 5 finding types bar chart)
+[BLOCK-7][F] add GuidelineDebuggerList.jsx (high-override rules + suggested rewording + Approve button)
+[BLOCK-7][F] verify MeaningCheck.jsx end-to-end with real ML data (remove all mock data)
+```
+
+**Om**
+```
+[BLOCK-7][O] run full ML demo story: 3 seeded issues (contradiction + superlative + expired fact)
+[BLOCK-7][O] verify all 3 findings returned with correct verdicts and proofPassageIds
+[BLOCK-7][O] verify fix generation and meaning check for all 3 findings
+[BLOCK-7][O] verify past-content contradiction detection end-to-end
+[BLOCK-7][O] document all ML gaps found; prioritise fixes for Block 8
+```
 
 **Stage 3 Sync (10 min at Hour 30):** Full Priya demo story run by all three roles. Creator submits → findings appear → accepts fix → manager approves → passport created. All three members confirm journey works end-to-end.
 
@@ -151,6 +377,31 @@ Must-priority rows alone cover all 5 judging criteria.
 
 **Block 8 exit:** Security checklist complete (zero cross-tenant leakage). All pages pass axe automated check. All error/loading/empty states handled. Evaluation numbers measured.
 
+#### Commits — Block 8
+
+**Somnath**
+```
+[BLOCK-8][S] security: verify orgId enforcement on all MongoDB queries
+[BLOCK-8][S] security: verify RBAC on approve/override endpoints; confirm no PATCH/DELETE on audit/passports
+[BLOCK-8][S] add structured error responses for 401, 403, 404, 422, 503, 400 (no stack traces)
+[BLOCK-8][S] add unit tests: JWT verify, orgId isolation, SHA-256 passport, role checks, finding transitions
+```
+
+**Falguni**
+```
+[BLOCK-8][F] accessibility: run axe-core on all 7 pages, fix colour contrast (min 4.5:1)
+[BLOCK-8][F] accessibility: fix keyboard tab order and add 2px focus rings on all interactive elements
+[BLOCK-8][F] accessibility: add aria-labels to icon-only buttons, fix heading hierarchy (single h1/page)
+[BLOCK-8][F] add loading states (spinner during review), error toasts (API failure), empty states (all pages)
+```
+
+**Om**
+```
+[BLOCK-8][O] run seeded evaluation: ~60 Stellara Brands test drafts through full ML pipeline
+[BLOCK-8][O] record recall, precision, citation rate, confidence calibration metrics
+[BLOCK-8][O] begin tuning confidence thresholds (Contradicted 0.85, Unclear 0.60 baseline)
+```
+
 ---
 
 ### BLOCK 9 (Hours 34–38)
@@ -164,6 +415,33 @@ Must-priority rows alone cover all 5 judging criteria.
 
 **Block 9 exit:** End-to-end automated test passes. Docker Compose cold start under 3 minutes. Image check endpoint works. Evaluation report with final numbers ready. Demo script written.
 
+#### Commits — Block 9
+
+**Somnath**
+```
+[BLOCK-9][S] write automated e2e test (creator → upload → review → accept → manager approve → passport verify)
+[BLOCK-9][S] finalize Docker Compose: health checks, volume mounts, seed.js for demo data
+[BLOCK-9][S] verify cold start under 3 minutes
+[BLOCK-9][S] run API contract tests: all OpenAPI endpoints tested for 400/401/403 compliance
+```
+
+**Falguni**
+```
+[BLOCK-9][F] walk through full Priya journey manually; write 8-minute demo script
+[BLOCK-9][F] prepare fallback screenshots of all key screens
+[BLOCK-9][F] final UI polish: hover states, focus rings, transition animations, spinners, status badges
+[BLOCK-9][F] verify AI-use disclosure notice on all LM-triggered review pages
+```
+
+**Om**
+```
+[BLOCK-9][O] build image_analyser.py (OpenCV colour extraction, WCAG contrast, alt text detection)
+[BLOCK-9][O] wire image_analyser to /image-check endpoint
+[BLOCK-9][O] test /image-check with synthetic Stellara Brands social media image
+[BLOCK-9][O] finalise confidence threshold tuning based on Block 8 evaluation results
+[BLOCK-9][O] document final threshold values and write evaluation report (markdown table + interpretation)
+```
+
 ---
 
 ### BLOCK 10 (Hours 38–40)
@@ -176,6 +454,36 @@ Must-priority rows alone cover all 5 judging criteria.
 | **All** | **Rehearsal 2 (final):** Run the full demo with all fixes applied. Record a backup video of the working product. Confirm all 5 judging-criteria talking points are explicitly addressed in the demo script. Product is ready. |
 
 **Block 10 exit:** Demo rehearsed twice. Backup recording saved. All 5 judging criteria covered in the demo script.
+
+#### Commits — Block 10
+
+**All Members**
+```
+[BLOCK-10][S] cold-start deploy from docker-compose up (rehearsal 1 verified)
+[BLOCK-10][F] fix UI issues found in rehearsal 1
+[BLOCK-10][S] fix backend/workflow issues found in rehearsal 1
+[BLOCK-10][O] fix ML/evaluation issues found in rehearsal 1
+[BLOCK-10][ALL] final rehearsal 2 verified — all 5 judging criteria addressed
+[BLOCK-10][ALL] save backup demo recording
+```
+
+---
+
+## Commit Summary by Block
+
+| Block | Hours | S Commits | F Commits | O Commits | Total |
+|---|---|---|---|---|---|
+| 1 | 0–4   | 7 | 7 | 4 | **18** |
+| 2 | 4–8   | 8 | 5 | 6 | **19** |
+| 3 | 10–14 | 5 | 7 | 5 | **17** |
+| 4 | 14–18 | 6 | 7 | 6 | **19** |
+| 5 | 18–22 | 6 | 7 | 4 | **17** |
+| 6 | 22–26 | 6 | 6 | 5 | **17** |
+| 7 | 26–30 | 3 | 5 | 5 | **13** |
+| 8 | 30–34 | 4 | 4 | 3 | **11** |
+| 9 | 34–38 | 4 | 4 | 5 | **13** |
+| 10 | 38–40 | 2 | 1 | 1+3 | **7** |
+| **Total** | **40 h** | **51** | **53** | **44** | **~151** |
 
 ---
 
@@ -248,4 +556,4 @@ Cut line: Drop from bottom upward. Must rows alone deliver the full demo story a
 
 ---
 
-*Document version: 3.0 | Hackathon: Codex 48 | 40-Hour Sprint*
+*Document version: 4.0 | Hackathon: Codex 48 | 40-Hour Sprint*
