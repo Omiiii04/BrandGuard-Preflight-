@@ -524,6 +524,89 @@ router.get('/:id/versions', async (req, res, next) => {
 });
 
 /**
+ * GET /v1/drafts/:id/findings
+ *
+ * Lists all compliance findings for a draft, scoped to the authenticated
+ * user's organisation.
+ *
+ * Query parameters:
+ *   page    {number}  — 1-indexed page number (default: 1)
+ *   limit   {number}  — Records per page, 1–100 (default: 20)
+ *   status  {string}  — Filter by finding status (open|accepted|edited|dismissed|escalated)
+ *   verdict {string}  — Filter by ML verdict
+ *   type    {string}  — Filter by finding type (violation|question)
+ *
+ * Returns: { data, pagination: { page, limit, total, totalPages } }
+ */
+router.get('/:id/findings', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId  = req.org?._id || req.orgId;
+
+    // ── 1. Validate draft ID ────────────────────────────────────────────────
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success : false,
+        error   : `Invalid draft ID "${id}".`,
+        code    : 'INVALID_ID',
+      });
+    }
+
+    // ── 2. Verify draft exists and belongs to this org ──────────────────────
+    const draft = await Draft.findOne({ _id: id, orgId }).lean();
+    if (!draft) {
+      return res.status(404).json({
+        success : false,
+        error   : `Draft "${id}" was not found in your organisation.`,
+        code    : 'DRAFT_NOT_FOUND',
+      });
+    }
+
+    // ── 3. Build orgId-scoped filter ────────────────────────────────────────
+    const filter = { orgId, draftId: id };
+
+    if (req.query.status && Finding.FINDING_STATUSES.includes(req.query.status)) {
+      filter.status = req.query.status;
+    }
+
+    if (req.query.verdict && Finding.FINDING_VERDICTS.includes(req.query.verdict)) {
+      filter.verdict = req.query.verdict;
+    }
+
+    if (req.query.type && Finding.FINDING_TYPES.includes(req.query.type)) {
+      filter.type = req.query.type;
+    }
+
+    // ── 4. Pagination params ────────────────────────────────────────────────
+    const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip  = (page - 1) * limit;
+
+    // ── 5. Query findings ───────────────────────────────────────────────────
+    const [findings, total] = await Promise.all([
+      Finding.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Finding.countDocuments(filter),
+    ]);
+
+    return res.json({
+      data       : findings,
+      pagination : {
+        page,
+        limit,
+        total,
+        totalPages : Math.ceil(total / limit) || 1,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
  * POST /v1/drafts/:id/review
  *
  * Triggers the ML compliance review pipeline for a submitted draft.

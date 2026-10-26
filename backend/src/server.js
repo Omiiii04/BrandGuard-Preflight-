@@ -52,6 +52,9 @@ app.use('/v1/sources', sourcesRouter);
 const draftsRouter = require('./routes/drafts');
 app.use('/v1/drafts', draftsRouter);
 
+const findingsRouter = require('./routes/findings');
+app.use('/v1/findings', findingsRouter);
+
 // ── Error handling middleware ────────────────────────────────────────────────
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 app.use(notFoundHandler);
