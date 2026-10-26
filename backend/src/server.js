@@ -1,30 +1,85 @@
-const express = require('express');
-const cors = require('cors');
+/**
+ * server.js — BrandGuard Preflight API entry point.
+ *
+ * Start order:
+ *   1. Load environment variables (.env)
+ *   2. Connect to MongoDB
+ *   3. Ensure MinIO bucket exists
+ *   4. Mount Express middleware & routes
+ *   5. Begin listening
+ */
+
 require('dotenv').config();
 
-const app = express();
-const PORT = process.env.PORT || 4000;
+const express = require('express');
+const cors    = require('cors');
 
-app.use(cors());
-app.use(express.json());
+const { connectDB }   = require('./utils/db');
+const { ensureBucket } = require('./utils/minio');
 
-// Healthcheck endpoint for Docker Compose
-app.get('/health', (req, res) => {
+// ── Express app ──────────────────────────────────────────────────────────────
+const app  = express();
+const PORT = process.env.PORT || process.env.API_PORT || 4000;
+
+// ── Global middleware ────────────────────────────────────────────────────────
+const corsOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : '*';
+
+app.use(cors({ origin: corsOrigins, credentials: true }));
+app.use(express.json({ limit: process.env.UPLOAD_MAX_BYTES ? `${process.env.UPLOAD_MAX_BYTES}b` : '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// ── Routes ───────────────────────────────────────────────────────────────────
+// Healthcheck — intentionally before any auth middleware so load-balancers
+// and Docker Compose health probes can reach it unauthenticated.
+app.get('/health', (_req, res) => {
   res.status(200).json({
-    status: 'healthy',
-    service: 'brandguard-api',
-    timestamp: new Date().toISOString()
+    status:    'healthy',
+    service:   'brandguard-api',
+    timestamp: new Date().toISOString(),
   });
 });
 
-app.get('/', (req, res) => {
-  res.json({
-    name: 'BrandGuard Preflight API',
-    version: '1.0.0',
-    status: 'running'
+app.get('/', (_req, res) => {
+  res.json({ name: 'BrandGuard Preflight API', version: '1.0.0', status: 'running' });
+});
+
+// TODO: mount feature routers here as they are built, e.g.:
+// const draftsRouter = require('./routes/drafts');
+// app.use('/v1/drafts', draftsRouter);
+
+// ── 404 catch-all ───────────────────────────────────────────────────────────
+app.use((_req, res) => {
+  res.status(404).json({ success: false, error: 'Route not found.' });
+});
+
+// ── Global error handler ─────────────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  console.error('[server] Unhandled error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    error:   process.env.NODE_ENV === 'production' ? 'Internal server error.' : err.message,
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`BrandGuard API server listening on port ${PORT}`);
-});
+// ── Startup ──────────────────────────────────────────────────────────────────
+async function start() {
+  try {
+    console.log('[server] Connecting to MongoDB…');
+    await connectDB();
+
+    console.log('[server] Bootstrapping MinIO bucket…');
+    await ensureBucket();
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[server] BrandGuard API listening on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+    });
+  } catch (err) {
+    console.error('[server] Fatal startup error:', err.message);
+    process.exit(1);
+  }
+}
+
+start();
