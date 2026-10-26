@@ -1,0 +1,31 @@
+.tpe-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.tpe-editor {
+  flex: 1;
+  min-height: 220px;
+  resize: none;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+}
+
+.tpe-counts {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+}
+
+.tpe-counts--over {
+  color: var(--color-danger);
+}
+
+.tpe-over-limit {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-medium);
+}

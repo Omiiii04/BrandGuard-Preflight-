@@ -1,0 +1,94 @@
+.fuz-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.fuz-zone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  position: relative;
+  padding: var(--space-6);
+}
+
+.fuz-zone:hover,
+.fuz-zone--over {
+  border-color: var(--color-accent-blue);
+  background-color: rgba(74, 144, 226, 0.05);
+}
+
+.fuz-zone--has-file {
+  border-color: var(--color-success);
+  border-style: solid;
+}
+
+.fuz-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.fuz-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.fuz-upload-icon {
+  font-size: 36px;
+}
+
+.fuz-label {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+}
+
+.fuz-hint {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+}
+
+.fuz-file-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  pointer-events: none;
+  width: 100%;
+}
+
+.fuz-file-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.fuz-file-name {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  word-break: break-all;
+  flex: 1;
+}
+
+.fuz-file-size {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+}
+
+.fuz-remove {
+  pointer-events: all;
+  padding: var(--space-1) var(--space-2);
+  flex-shrink: 0;
+  font-size: var(--font-size-body-sm);
+}

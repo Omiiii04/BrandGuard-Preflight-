@@ -1,0 +1,18 @@
+.source-list-filters {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.source-list-select {
+  width: auto;
+  flex: 1;
+  min-width: 130px;
+}
+
+.source-list-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
