@@ -1,7 +1,7 @@
 /**
  * passportBuilder.js — Brand Passport Generation Service.
  *
- * Implements FR-AP-01, SDD Section 2.10, and Block 6 passport builder:
+ * Implements FR-AP-01, FR-AP-02, SDD Section 2.10, and Block 6 passport builder:
  * Generates an append-only, tamper-evident Brand Passport document:
  *   - SHA-256 contentHash of the approved content
  *   - checksRun: array of checks executed (e.g. ['claim_match', 'contradiction', 'rules', 'premortem'])
@@ -10,7 +10,7 @@
  *   - aiUsed: boolean flag indicating if AI was utilised
  *   - timestamp: immutable approval date
  *
- * Stores the record in the append-only `passports` collection.
+ * Stores the record in the append-only `passports` collection (no PATCH or DELETE routes).
  */
 
 'use strict';
@@ -23,17 +23,18 @@ const { sha256 } = require('../utils/hash');
  * Builds and persists a Brand Passport.
  *
  * @param {object} params
- * @param {mongoose.Types.ObjectId|string} params.orgId
- * @param {mongoose.Types.ObjectId|string} params.draftId
- * @param {mongoose.Types.ObjectId|string} [params.draftVersionId]
- * @param {string} [params.content] - Approved text content (used to compute or verify hash)
+ * @param {mongoose.Types.ObjectId|string} params.orgId - Organisation identifier
+ * @param {mongoose.Types.ObjectId|string} params.draftId - Draft identifier
+ * @param {mongoose.Types.ObjectId|string} [params.draftVersionId] - Approved version identifier
+ * @param {string|Buffer} [params.content] - Approved text content (used to compute or verify SHA-256 hash)
  * @param {string} [params.contentHash] - Pre-computed SHA-256 digest
- * @param {Array<string>} [params.checksRun] - List of checks executed
- * @param {string} [params.rulesVersion] - Rules version string
+ * @param {Array<string>} [params.checksRun] - List of compliance checks run
+ * @param {string} [params.rulesVersion] - Active rules version string
  * @param {mongoose.Types.ObjectId|string|Array} [params.approverId] - Authorising manager user ID
- * @param {Array<mongoose.Types.ObjectId|string>} [params.approvers] - Authorising managers
+ * @param {Array<mongoose.Types.ObjectId|string>} [params.approvers] - Authorising manager user IDs
  * @param {boolean} [params.aiUsed] - Whether AI models were engaged
- * @returns {Promise<import('mongoose').Document>} Persisted Passport document
+ * @param {string|null} [params.externalProviderUsed] - Optional external AI provider name
+ * @returns {Promise<import('mongoose').Document>} Persisted Brand Passport document
  */
 async function buildPassport(params) {
   if (!params || typeof params !== 'object') {
@@ -44,45 +45,57 @@ async function buildPassport(params) {
     orgId,
     draftId,
     draftVersionId = null,
-    content = '',
+    content,
     contentHash: providedHash,
     checksRun = ['claim_match', 'contradiction', 'rules', 'premortem'],
     rulesVersion = process.env.RULES_VERSION || 'v1.2',
     approverId,
     approvers: providedApprovers,
     aiUsed = true,
+    externalProviderUsed = null,
   } = params;
 
   if (!orgId) throw new Error('[passportBuilder] orgId is required.');
   if (!draftId) throw new Error('[passportBuilder] draftId is required.');
 
-  // Determine contentHash: use provided hash or compute from content
+  // Compute or verify contentHash from approved content
   let computedHash = providedHash;
-  if (!computedHash && typeof content === 'string') {
-    computedHash = sha256(content);
+  if (content !== undefined && content !== null) {
+    const rawContent = Buffer.isBuffer(content) || typeof content === 'string' ? content : String(content);
+    const calculated = sha256(rawContent);
+
+    if (providedHash && providedHash.toLowerCase() !== calculated.toLowerCase()) {
+      throw new Error('[passportBuilder] Provided contentHash does not match SHA-256 of approved content.');
+    }
+    computedHash = calculated;
   }
 
-  if (!computedHash || !/^[a-f0-9]{64}$/i.test(computedHash)) {
-    throw new Error('[passportBuilder] A valid 64-character SHA-256 contentHash is required.');
+  if (!computedHash || typeof computedHash !== 'string' || !/^[a-f0-9]{64}$/i.test(computedHash)) {
+    throw new Error('[passportBuilder] A valid 64-character SHA-256 contentHash or content string is required.');
   }
 
-  // Normalize approvers list
+  // Normalize approvers list into User ObjectIds
   let approversList = [];
   if (Array.isArray(providedApprovers) && providedApprovers.length > 0) {
     approversList = providedApprovers.map((a) => (a?._id || a));
   } else if (approverId) {
-    approversList = [approverId?._id || approverId];
+    approversList = Array.isArray(approverId)
+      ? approverId.map((a) => (a?._id || a))
+      : [approverId?._id || approverId];
   }
 
   const passport = new Passport({
     orgId,
     draftId,
     draftVersionId,
-    contentHash: computedHash,
-    checksRun: Array.isArray(checksRun) && checksRun.length > 0 ? checksRun : ['claim_match', 'contradiction', 'rules', 'premortem'],
+    contentHash: computedHash.toLowerCase(),
+    checksRun: Array.isArray(checksRun) && checksRun.length > 0
+      ? checksRun
+      : ['claim_match', 'contradiction', 'rules', 'premortem'],
     rulesVersion: rulesVersion || 'v1.2',
     approvers: approversList,
     aiUsed: Boolean(aiUsed),
+    externalProviderUsed: externalProviderUsed || null,
     timestamp: new Date(),
   });
 

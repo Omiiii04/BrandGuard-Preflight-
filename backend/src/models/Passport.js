@@ -78,6 +78,12 @@ const passportSchema = new mongoose.Schema(
       default: true,
     },
 
+    /** External AI provider used if any (per Prompt Governance Spec 6.3) */
+    externalProviderUsed: {
+      type: String,
+      default: null,
+    },
+
     /** Immutable sign-off timestamp */
     timestamp: {
       type: Date,
@@ -94,6 +100,44 @@ const passportSchema = new mongoose.Schema(
 
 passportSchema.index({ orgId: 1, draftId: 1 });
 passportSchema.index({ orgId: 1, contentHash: 1 });
+
+// Append-only guards: Passports are immutable audit records
+passportSchema.pre('save', function (next) {
+  if (!this.isNew) {
+    const err = new Error('Passport documents are immutable once created.');
+    err.name = 'ImmutablePassportError';
+    return next(err);
+  }
+  next();
+});
+
+const blockUpdate = function (next) {
+  const err = new Error('Passport collection is append-only. Updates are prohibited.');
+  err.name = 'ImmutablePassportError';
+  if (typeof next === 'function') {
+    return next(err);
+  }
+  throw err;
+};
+
+const blockDelete = function (next) {
+  const err = new Error('Passport collection is append-only. Deletions are prohibited.');
+  err.name = 'ImmutablePassportError';
+  if (typeof next === 'function') {
+    return next(err);
+  }
+  throw err;
+};
+
+passportSchema.pre('updateOne', blockUpdate);
+passportSchema.pre('updateMany', blockUpdate);
+passportSchema.pre('findOneAndUpdate', blockUpdate);
+passportSchema.pre('findByIdAndUpdate', blockUpdate);
+
+passportSchema.pre('deleteOne', blockDelete);
+passportSchema.pre('deleteMany', blockDelete);
+passportSchema.pre('findOneAndDelete', blockDelete);
+passportSchema.pre('findByIdAndDelete', blockDelete);
 
 const Passport = mongoose.model('Passport', passportSchema);
 
