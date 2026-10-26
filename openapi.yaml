@@ -1336,6 +1336,38 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Collaboration]
+      summary: Retrieve all comments and workflow actions for a draft
+      operationId: getDraftComments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: findingId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectId"
+      responses:
+        "200":
+          description: List of comments for the draft.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Comment"
+                  count:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /v1/drafts/{id}/approve:
     parameters:

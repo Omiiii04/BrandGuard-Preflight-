@@ -18,14 +18,18 @@ const multer = require('multer');
 const Draft = require('../models/Draft');
 const DraftVersion = require('../models/DraftVersion');
 const Finding = require('../models/Finding');
+const Comment = require('../models/Comment');
+const Passport = require('../models/Passport');
 const { authenticate } = require('../middleware/auth');
 const { orgIsolation } = require('../middleware/orgIsolation');
+const { requireRole } = require('../middleware/rbac');
 const { performAvScan, MAX_FILE_SIZE } = require('../middleware/uploadScan');
 const { redactContent, loadOrgWatchlist } = require('../middleware/redactionGateway');
 const { sha256 } = require('../utils/hash');
 const { logEvent, logEventSafe, AUDIT_EVENTS } = require('../services/auditLogger');
 const { uploadObject, getPresignedUrl } = require('../utils/minio');
 const { extractClaims } = require('../services/mlOrchestrator');
+const { buildPassport } = require('../services/passportBuilder');
 
 const router = express.Router();
 
@@ -785,5 +789,498 @@ function summariseVerdicts(findings) {
     return acc;
   }, {});
 }
+
+// ── Collaboration & Approval Endpoints ────────────────────────────────────────
+
+/**
+ * POST /v1/drafts/:id/comments
+ *
+ * Adds a threaded comment or workflow action (comment, approve, request-changes, override)
+ * to a draft, scoped to the caller's organisation.
+ *
+ * Body parameters:
+ *   - text: string (required)
+ *   - action: string ('comment' | 'approve' | 'request-changes' | 'override') (optional, default 'comment')
+ *   - findingId: ObjectId (optional)
+ *   - reason: string (required if action === 'override')
+ *   - commentId / parentCommentId: ObjectId (optional, appends reply to existing comment thread)
+ *
+ * Side-effect:
+ *   Emits AuditLog event 'comment_added'.
+ */
+router.post('/:id/comments', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.org?._id || req.orgId;
+    const actor = req.user;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid draft ID "${id}".`,
+        code: 'INVALID_ID',
+      });
+    }
+
+    const draft = await Draft.findOne({ _id: id, orgId });
+    if (!draft) {
+      return res.status(404).json({
+        success: false,
+        error: `Draft "${id}" was not found in your organisation.`,
+        code: 'DRAFT_NOT_FOUND',
+      });
+    }
+
+    const {
+      text,
+      action = 'comment',
+      findingId = null,
+      reason = null,
+      commentId,
+      parentCommentId,
+    } = req.body || {};
+
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Comment text is required and cannot be empty.',
+        code: 'MISSING_TEXT',
+      });
+    }
+
+    const trimmedText = text.trim();
+    const allowedActions = Comment.COMMENT_ACTIONS;
+    const normalisedAction = action ? String(action).trim().toLowerCase() : 'comment';
+
+    if (!allowedActions.includes(normalisedAction)) {
+      return res.status(400).json({
+        success: false,
+        error: `Action "${action}" is invalid. Allowed actions: ${allowedActions.join(', ')}.`,
+        code: 'INVALID_ACTION',
+      });
+    }
+
+    if (normalisedAction === 'override' && (!reason || !String(reason).trim())) {
+      return res.status(400).json({
+        success: false,
+        error: 'A reason is required when action is "override".',
+        code: 'REASON_REQUIRED',
+      });
+    }
+
+    if (findingId && !mongoose.Types.ObjectId.isValid(findingId)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid finding ID "${findingId}".`,
+        code: 'INVALID_FINDING_ID',
+      });
+    }
+
+    const targetCommentId = commentId || parentCommentId;
+    let commentDoc;
+
+    const threadEntry = {
+      author: actor?._id,
+      authorName: actor?.name || 'User',
+      authorRole: actor?.role || 'reviewer',
+      text: trimmedText,
+      timestamp: new Date(),
+    };
+
+    if (targetCommentId) {
+      if (!mongoose.Types.ObjectId.isValid(targetCommentId)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid comment ID "${targetCommentId}".`,
+          code: 'INVALID_COMMENT_ID',
+        });
+      }
+
+      commentDoc = await Comment.findOne({
+        _id: targetCommentId,
+        draftId: draft._id,
+        orgId,
+      });
+
+      if (!commentDoc) {
+        return res.status(404).json({
+          success: false,
+          error: `Comment thread "${targetCommentId}" not found.`,
+          code: 'COMMENT_NOT_FOUND',
+        });
+      }
+
+      commentDoc.thread.push(threadEntry);
+      commentDoc.updatedAt = new Date();
+      await commentDoc.save();
+    } else {
+      commentDoc = new Comment({
+        orgId,
+        draftId: draft._id,
+        findingId: findingId || null,
+        action: normalisedAction,
+        type: normalisedAction === 'approve'
+          ? 'approved'
+          : normalisedAction === 'request-changes'
+          ? 'changes-requested'
+          : normalisedAction,
+        author: actor?._id,
+        authorName: actor?.name || 'User',
+        authorRole: actor?.role || 'reviewer',
+        text: trimmedText,
+        reason: reason ? String(reason).trim() : null,
+        thread: [threadEntry],
+        createdAt: new Date(),
+      });
+      await commentDoc.save();
+    }
+
+    // Write AuditLog: comment_added
+    await logEventSafe({
+      orgId,
+      actor,
+      eventType: AUDIT_EVENTS.COMMENT_ADDED,
+      entityType: 'comment',
+      entityId: commentDoc._id,
+      metadata: {
+        draftId: draft._id,
+        findingId: findingId || null,
+        action: commentDoc.action,
+        commentId: commentDoc._id,
+        threadLength: commentDoc.thread.length,
+      },
+    });
+
+    const populated = await Comment.findById(commentDoc._id)
+      .populate('author', 'name email role')
+      .populate('thread.author', 'name email role')
+      .lean();
+
+    return res.status(201).json({
+      success: true,
+      ...populated,
+      data: populated,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * GET /v1/drafts/:id/comments
+ *
+ * Lists all threaded comments for a draft, scoped to the caller's organisation.
+ * Supports optional filtering by `findingId`.
+ */
+router.get('/:id/comments', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.org?._id || req.orgId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid draft ID "${id}".`,
+        code: 'INVALID_ID',
+      });
+    }
+
+    const draft = await Draft.findOne({ _id: id, orgId }).lean();
+    if (!draft) {
+      return res.status(404).json({
+        success: false,
+        error: `Draft "${id}" was not found in your organisation.`,
+        code: 'DRAFT_NOT_FOUND',
+      });
+    }
+
+    const filter = { draftId: draft._id, orgId };
+    if (req.query.findingId) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.findingId)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid finding ID "${req.query.findingId}".`,
+          code: 'INVALID_FINDING_ID',
+        });
+      }
+      filter.findingId = req.query.findingId;
+    }
+
+    const comments = await Comment.find(filter)
+      .sort({ createdAt: 1 })
+      .populate('author', 'name email role')
+      .populate('thread.author', 'name email role')
+      .lean();
+
+    const mapped = comments.map((c) => ({
+      ...c,
+      authorName: c.authorName || c.author?.name || 'User',
+      authorRole: c.authorRole || c.author?.role || 'reviewer',
+      type: c.type || (c.action === 'approve' ? 'approved' : c.action === 'request-changes' ? 'changes-requested' : c.action || 'comment'),
+      text: c.text || (c.thread?.[0]?.text ?? ''),
+    }));
+
+    return res.json({
+      success: true,
+      data: mapped,
+      count: mapped.length,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * POST /v1/drafts/:id/approve
+ *
+ * Approves a draft, increments and creates a new DraftVersion, triggers passportBuilder,
+ * sets draft status to 'approved', and writes AuditLog event 'draft_approved'.
+ *
+ * RBAC: Manager role required (manager, brand_manager, admin, owner).
+ */
+router.post(
+  '/:id/approve',
+  requireRole('manager'),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.org?._id || req.orgId;
+      const actor = req.user;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid draft ID "${id}".`,
+          code: 'INVALID_ID',
+        });
+      }
+
+      const draft = await Draft.findOne({ _id: id, orgId });
+      if (!draft) {
+        return res.status(404).json({
+          success: false,
+          error: `Draft "${id}" was not found in your organisation.`,
+          code: 'DRAFT_NOT_FOUND',
+        });
+      }
+
+      // Check for open / unresolved findings
+      const openFindingsCount = await Finding.countDocuments({
+        draftId: draft._id,
+        orgId,
+        status: 'open',
+      });
+
+      if (openFindingsCount > 0) {
+        return res.status(409).json({
+          success: false,
+          error: `Open findings must be resolved before approval. Found ${openFindingsCount} open finding(s).`,
+          code: 'OPEN_FINDINGS_EXIST',
+          openFindingsCount,
+        });
+      }
+
+      // Retrieve latest DraftVersion to base approved version upon
+      const latestVersion = await DraftVersion.findOne({ draftId: draft._id, orgId })
+        .sort({ versionNumber: -1 });
+
+      const currentVersionNum = latestVersion ? latestVersion.versionNumber : (draft.currentVersion || 1);
+      const nextVersionNum = currentVersionNum + 1;
+
+      // Extract approved content (from body or fallback to latest version's content)
+      const approvedContent =
+        req.body?.content !== undefined
+          ? String(req.body.content)
+          : req.body?.approvedContent !== undefined
+          ? String(req.body.approvedContent)
+          : (latestVersion?.content || '');
+
+      const contentHash = sha256(approvedContent);
+
+      // Create new DraftVersion representing the approved revision
+      const newDraftVersion = new DraftVersion({
+        draftId: draft._id,
+        orgId,
+        versionNumber: nextVersionNum,
+        content: approvedContent,
+        contentHash,
+        diff: latestVersion ? `Approved version v${nextVersionNum}` : '',
+        author: actor?._id || null,
+        createdAt: new Date(),
+      });
+      await newDraftVersion.save();
+
+      // Update draft status and currentVersion
+      draft.status = 'approved';
+      draft.currentVersion = nextVersionNum;
+      await draft.save();
+
+      // Trigger passportBuilder
+      const passport = await buildPassport({
+        orgId,
+        draftId: draft._id,
+        draftVersionId: newDraftVersion._id,
+        content: approvedContent,
+        contentHash,
+        checksRun: req.body?.checksRun || ['claim_match', 'contradiction', 'rules', 'premortem'],
+        rulesVersion: req.body?.rulesVersion || process.env.RULES_VERSION || 'v1.2',
+        approverId: actor?._id,
+        aiUsed: req.body?.aiUsed !== undefined ? req.body.aiUsed : true,
+      });
+
+      // Record AuditLog: draft_approved
+      await logEventSafe({
+        orgId,
+        actor,
+        eventType: AUDIT_EVENTS.DRAFT_APPROVED,
+        entityType: 'draft',
+        entityId: draft._id,
+        metadata: {
+          draftVersionId: newDraftVersion._id,
+          versionNumber: nextVersionNum,
+          passportId: passport._id,
+          contentHash,
+        },
+      });
+
+      // Record AuditLog: passport_created
+      await logEventSafe({
+        orgId,
+        actor,
+        eventType: AUDIT_EVENTS.PASSPORT_CREATED,
+        entityType: 'passport',
+        entityId: passport._id,
+        metadata: {
+          draftId: draft._id,
+          draftVersionId: newDraftVersion._id,
+          contentHash,
+          rulesVersion: passport.rulesVersion,
+          approvers: passport.approvers,
+        },
+      });
+
+      // Also record approval action in Comment collection for threaded collaboration history
+      try {
+        const approvalCommentText = req.body?.comment || `${actor?.name || 'Manager'} approved this draft.`;
+        const approvalComment = new Comment({
+          orgId,
+          draftId: draft._id,
+          action: 'approve',
+          type: 'approved',
+          author: actor?._id || draft.author,
+          authorName: actor?.name || 'Manager',
+          authorRole: actor?.role || 'manager',
+          text: approvalCommentText,
+          thread: [
+            {
+              author: actor?._id || draft.author,
+              authorName: actor?.name || 'Manager',
+              authorRole: actor?.role || 'manager',
+              text: approvalCommentText,
+              timestamp: new Date(),
+            },
+          ],
+          createdAt: new Date(),
+        });
+        await approvalComment.save();
+      } catch (commErr) {
+        console.warn('[drafts] Approval comment recording skipped:', commErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        draft: draft.toObject(),
+        passport: passport.toObject(),
+        version: newDraftVersion.toObject(),
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+/**
+ * POST /v1/drafts/:id/request-changes
+ *
+ * Sends a draft back to the creator with revision requests.
+ * Sets draft status back to 'draft' and emits AuditLog event 'changes_requested'.
+ *
+ * RBAC: Manager role required.
+ */
+router.post(
+  '/:id/request-changes',
+  requireRole('manager'),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const orgId = req.org?._id || req.orgId;
+      const actor = req.user;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid draft ID "${id}".`,
+          code: 'INVALID_ID',
+        });
+      }
+
+      const draft = await Draft.findOne({ _id: id, orgId });
+      if (!draft) {
+        return res.status(404).json({
+          success: false,
+          error: `Draft "${id}" was not found in your organisation.`,
+          code: 'DRAFT_NOT_FOUND',
+        });
+      }
+
+      const reason = req.body?.reason || req.body?.text || 'Changes requested by reviewer.';
+
+      draft.status = 'draft';
+      await draft.save();
+
+      const changeComment = new Comment({
+        orgId,
+        draftId: draft._id,
+        action: 'request-changes',
+        type: 'changes-requested',
+        author: actor?._id || draft.author,
+        authorName: actor?.name || 'Manager',
+        authorRole: actor?.role || 'manager',
+        text: reason,
+        thread: [
+          {
+            author: actor?._id || draft.author,
+            authorName: actor?.name || 'Manager',
+            authorRole: actor?.role || 'manager',
+            text: reason,
+            timestamp: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+      });
+      await changeComment.save();
+
+      await logEventSafe({
+        orgId,
+        actor,
+        eventType: AUDIT_EVENTS.CHANGES_REQUESTED,
+        entityType: 'draft',
+        entityId: draft._id,
+        metadata: {
+          reason,
+          commentId: changeComment._id,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        draft: draft.toObject(),
+        comment: changeComment.toObject(),
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 module.exports = router;

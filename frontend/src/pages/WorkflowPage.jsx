@@ -79,7 +79,7 @@ export default function WorkflowPage() {
         setComments(MOCK_COMMENTS);
       } else {
         const { data } = await getComments(draftId);
-        setComments(data);
+        setComments(Array.isArray(data) ? data : (data?.data || []));
       }
     } catch {
       showToast('Failed to load comments.', 'error');
