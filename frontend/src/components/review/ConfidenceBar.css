@@ -1,0 +1,30 @@
+.cb-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cb-track {
+  flex: 1;
+  height: 6px;
+  background: var(--color-bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.cb-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.cb-fill--high { background: var(--color-verdict-supported); }
+.cb-fill--mid  { background: var(--color-verdict-outdated); }
+.cb-fill--low  { background: var(--color-verdict-contradicted); }
+
+.cb-label {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+  min-width: 32px;
+  text-align: right;
+}
