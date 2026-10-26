@@ -6,6 +6,7 @@
  *   GET  /v1/drafts              — List organisation drafts with pagination & filtering
  *   GET  /v1/drafts/:id          — Get draft metadata and current status
  *   GET  /v1/drafts/:id/versions — List all version revisions of a draft with SHA-256 hashes
+ *   POST /v1/drafts/:id/review   — Trigger ML review pipeline; persist findings; write AuditLog
  */
 
 const express = require('express');
@@ -16,18 +17,21 @@ const multer = require('multer');
 
 const Draft = require('../models/Draft');
 const DraftVersion = require('../models/DraftVersion');
+const Finding = require('../models/Finding');
 const { authenticate } = require('../middleware/auth');
 const { orgIsolation } = require('../middleware/orgIsolation');
 const { performAvScan, MAX_FILE_SIZE } = require('../middleware/uploadScan');
 const { redactContent, loadOrgWatchlist } = require('../middleware/redactionGateway');
 const { sha256 } = require('../utils/hash');
-const { logEvent, AUDIT_EVENTS } = require('../services/auditLogger');
+const { logEvent, logEventSafe, AUDIT_EVENTS } = require('../services/auditLogger');
 const { uploadObject, getPresignedUrl } = require('../utils/minio');
+const { extractClaims } = require('../services/mlOrchestrator');
 
 const router = express.Router();
 
 // Enforce authentication and organisation tenancy boundary on all draft endpoints
 router.use(authenticate, orgIsolation);
+
 
 // Multer memory-storage configuration for multipart draft submissions
 const ALLOWED_DRAFT_EXTENSIONS = ['.pdf', '.docx', '.md', '.markdown', '.txt'];
@@ -518,5 +522,185 @@ router.get('/:id/versions', async (req, res, next) => {
     return next(err);
   }
 });
+
+/**
+ * POST /v1/drafts/:id/review
+ *
+ * Triggers the ML compliance review pipeline for a submitted draft.
+ *
+ * Pipeline:
+ *   1. Validate and resolve the draft (orgId-scoped, must exist).
+ *   2. Load the latest DraftVersion — this is what the ML analyses.
+ *   3. Load the org watchlist and run redaction gateway on version content.
+ *      Only the redacted content is forwarded to ML (never raw text).
+ *   4. Call mlOrchestrator.extractClaims() → POST ML_SERVICE_URL/extract-claims.
+ *      - Enforces configurable timeout (ML_TIMEOUT_MS, default 30 s).
+ *      - Validates response schema; writes ml_response_discarded on failure.
+ *   5. Bulk-insert validated claims as Finding documents in MongoDB.
+ *      Each Finding is orgId-scoped and tied to the draftVersionId.
+ *   6. Update Draft status: 'draft' → 'checked'.
+ *   7. Write immutable AuditLog event: 'review_completed'.
+ *   8. Return summary: { draftId, draftVersionId, findingsCount, findings[] }.
+ *
+ * Error handling:
+ *   - ML timeout / network: 502 Bad Gateway.
+ *   - ML schema invalid: 502 Bad Gateway (with ml_response_discarded audit).
+ *   - ML not configured: 503 Service Unavailable.
+ *   - Draft not found: 404.
+ *   - MongoDB errors: propagated to error handler middleware.
+ */
+router.post('/:id/review', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId  = req.org?._id || req.orgId;
+    const actor  = req.user?._id || null;
+
+    // ── 1. Validate draft ID ────────────────────────────────────────────────
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success : false,
+        error   : `Invalid draft ID "${id}".`,
+        code    : 'INVALID_ID',
+      });
+    }
+
+    // ── 2. Load draft (orgId-scoped) ────────────────────────────────────────
+    const draft = await Draft.findOne({ _id: id, orgId });
+    if (!draft) {
+      return res.status(404).json({
+        success : false,
+        error   : `Draft "${id}" was not found in your organisation.`,
+        code    : 'DRAFT_NOT_FOUND',
+      });
+    }
+
+    // ── 3. Load latest DraftVersion ─────────────────────────────────────────
+    const draftVersion = await DraftVersion.findOne({ draftId: draft._id, orgId })
+      .sort({ versionNumber: -1 })
+      .lean();
+
+    if (!draftVersion) {
+      return res.status(409).json({
+        success : false,
+        error   : 'Draft has no content version to review. Submit content first.',
+        code    : 'NO_VERSION',
+      });
+    }
+
+    // ── 4. Redaction gateway — strip confidential terms before ML call ───────
+    const watchlist       = await loadOrgWatchlist(orgId, req.org);
+    const redactionResult = redactContent(draftVersion.content || '', watchlist);
+
+    if (redactionResult.hasRedactions) {
+      console.log(
+        `[drafts/review] Redacted ${redactionResult.totalReplacements} term(s) before ML call` +
+        ` for draft ${id} / org ${orgId}`
+      );
+    }
+
+    // ── 5. Call ML Orchestrator ─────────────────────────────────────────────
+    let claims;
+    try {
+      claims = await extractClaims({
+        redactedContent : redactionResult.redactedContent,
+        orgId           : orgId.toString(),
+        intent          : draft.intent,
+        draftId         : draft._id,
+        actor,
+      });
+    } catch (mlErr) {
+      const mlCode = mlErr.code || 'ML_ERROR';
+
+      // ML not configured — operator error, not transient
+      if (mlCode === 'ML_URL_NOT_CONFIGURED') {
+        return res.status(503).json({
+          success : false,
+          error   : 'ML service is not configured. Contact the system administrator.',
+          code    : mlCode,
+        });
+      }
+
+      // Timeout, network, schema failures — transient / ML-side
+      return res.status(502).json({
+        success : false,
+        error   : `ML service call failed: ${mlErr.message}`,
+        code    : mlCode,
+      });
+    }
+
+    // ── 6. Bulk-insert Finding documents (orgId-scoped) ─────────────────────
+    let savedFindings = [];
+
+    if (claims.length > 0) {
+      const findingDocs = claims.map((claim) => ({
+        orgId          : orgId,
+        draftId        : draft._id,
+        draftVersionId : draftVersion._id,
+        span           : {
+          start : claim.span.start,
+          end   : claim.span.end,
+        },
+        type           : claim.type,
+        verdict        : claim.verdict,
+        confidence     : claim.confidence,
+        suggestedFix   : claim.suggestedFix   || null,
+        ruleId         : claim.ruleId         || null,
+        meaningCheck   : claim.meaningCheck   || null,
+        proofPassageId : claim.proofPassageId || null,
+        status         : 'open',
+      }));
+
+      savedFindings = await Finding.insertMany(findingDocs, { ordered: false });
+    }
+
+    // ── 7. Update draft status: draft → checked ──────────────────────────────
+    draft.status = 'checked';
+    await draft.save();
+
+    // ── 8. Write review_completed AuditLog event ────────────────────────────
+    await logEventSafe({
+      orgId,
+      actor,
+      eventType  : AUDIT_EVENTS.REVIEW_COMPLETED,
+      entityType : 'draft',
+      entityId   : draft._id,
+      metadata   : {
+        draftVersionId     : draftVersion._id,
+        versionNumber      : draftVersion.versionNumber,
+        findingsCount      : savedFindings.length,
+        verdictSummary     : summariseVerdicts(savedFindings),
+        hasRedactions      : redactionResult.hasRedactions,
+        redactionsCount    : redactionResult.totalReplacements,
+        mlServiceUrl       : (process.env.ML_SERVICE_URL || '').replace(/\/$/, ''),
+      },
+    });
+
+    // ── 9. Return review summary ─────────────────────────────────────────────
+    return res.status(200).json({
+      success        : true,
+      draftId        : draft._id,
+      draftVersionId : draftVersion._id,
+      status         : draft.status,
+      findingsCount  : savedFindings.length,
+      findings       : savedFindings.map((f) => f.toObject ? f.toObject() : f),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Produces a compact verdict distribution summary for audit metadata.
+ *
+ * @param {Array<object>} findings
+ * @returns {object} e.g. { Supported: 2, Contradicted: 1, Unclear: 1 }
+ */
+function summariseVerdicts(findings) {
+  return findings.reduce((acc, f) => {
+    const v = f.verdict || 'Unknown';
+    acc[v] = (acc[v] || 0) + 1;
+    return acc;
+  }, {});
+}
 
 module.exports = router;
