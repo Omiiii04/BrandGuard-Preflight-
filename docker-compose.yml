@@ -1,0 +1,149 @@
+services:
+  # 1. Frontend Web Application (React + Vite served via Nginx)
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: brandguard-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:4000}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - brandguard-net
+
+  # 2. Backend API Service (Node.js Express)
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: brandguard-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-4000}:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=${NODE_ENV:-development}
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/brandguard}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio}
+      - MINIO_PORT=${MINIO_PORT:-9000}
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
+      - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml:8000}
+      - JWT_SECRET=${JWT_SECRET:-brandguard-super-secret-jwt-key-2026}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - brandguard-net
+
+  # 3. ML Service (Python FastAPI)
+  ml:
+    build:
+      context: ./ml_service
+      dockerfile: Dockerfile
+    container_name: brandguard-ml
+    restart: unless-stopped
+    ports:
+      - "${ML_PORT:-8000}:8000"
+    environment:
+      - PORT=8000
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/brandguard}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio}
+      - MINIO_PORT=${MINIO_PORT:-9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
+    volumes:
+      - faiss_data:/app/indexes
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - brandguard-net
+
+  # 4. Database (MongoDB 7)
+  mongo:
+    image: mongo:7.0
+    container_name: brandguard-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=brandguard
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand(\"ping\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - brandguard-net
+
+  # 5. Object Storage (MinIO S3-Compatible)
+  minio:
+    image: minio/minio:RELEASE.2024-03-30T09-41-56Z
+    container_name: brandguard-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - brandguard-net
+
+volumes:
+  mongo_data:
+    name: brandguard_mongo_data
+  minio_data:
+    name: brandguard_minio_data
+  faiss_data:
+    name: brandguard_faiss_data
+
+networks:
+  brandguard-net:
+    name: brandguard-net
+    driver: bridge
