@@ -1,0 +1,42 @@
+.orm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: var(--space-4);
+}
+
+.orm-modal {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.orm-title {
+  font-size: var(--font-size-heading-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.orm-desc {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.orm-textarea {
+  min-height: 100px;
+  resize: vertical;
+  font-size: var(--font-size-body-sm);
+}
+
+.orm-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
