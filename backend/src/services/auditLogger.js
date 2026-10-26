@@ -33,6 +33,7 @@ const AUDIT_EVENTS = {
   PASSPORT_CREATED: 'passport_created',
   CONFIDENTIAL_TERM_BLOCKED: 'confidential_term_blocked',
   ML_RESPONSE_DISCARDED: 'ml_response_discarded',
+  FACT_ADDED: 'fact_added',
 };
 
 /**
