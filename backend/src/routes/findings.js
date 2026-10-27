@@ -27,6 +27,7 @@ const { authenticate }              = require('../middleware/auth');
 const { orgIsolation }              = require('../middleware/orgIsolation');
 const { requireRole }               = require('../middleware/rbac');
 const { logEvent, AUDIT_EVENTS }    = require('../services/auditLogger');
+const { createDraftVersionOnAcceptedFix } = require('../services/versionManager');
 
 const router = express.Router();
 
@@ -229,12 +230,28 @@ router.patch(
 
       await finding.save();
 
+      // ── 6b. Version management on accepted fix ──────────────────────────────
+      let createdVersion = null;
+      if (normalisedStatus === 'accepted' || (normalisedStatus === 'edited' && (editedText || finding.suggestedFix))) {
+        try {
+          const versionResult = await createDraftVersionOnAcceptedFix({
+            finding,
+            orgId,
+            actor: req.user,
+            suggestedFix: (normalisedStatus === 'edited' && editedText) ? editedText : finding.suggestedFix,
+          });
+          createdVersion = versionResult.draftVersion;
+        } catch (versionErr) {
+          console.warn('[findings] Failed to create DraftVersion on accepted fix:', versionErr.message);
+        }
+      }
+
       // ── 7. Write AuditLog event: 'finding_actioned' ─────────────────────────
       const auditMetadata = {
         previousStatus,
         newStatus      : normalisedStatus,
         draftId        : finding.draftId,
-        draftVersionId : finding.draftVersionId,
+        draftVersionId : createdVersion ? createdVersion._id : finding.draftVersionId,
         verdict        : finding.verdict,
         type           : finding.type,
         ruleId         : finding.ruleId || null,
@@ -244,6 +261,9 @@ router.patch(
       if (editedText) auditMetadata.editedText = editedText;
       if (normalisedStatus === 'edited' && previousSuggestedFix !== editedText) {
         auditMetadata.previousSuggestedFix = previousSuggestedFix;
+      }
+      if (createdVersion) {
+        auditMetadata.newVersionNumber = createdVersion.versionNumber;
       }
 
       try {
@@ -267,6 +287,7 @@ router.patch(
         finding        : finding.toObject(),
         previousStatus,
         newStatus      : normalisedStatus,
+        version        : createdVersion ? (createdVersion.toObject ? createdVersion.toObject() : createdVersion) : undefined,
       });
     } catch (err) {
       return next(err);

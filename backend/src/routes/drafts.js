@@ -31,6 +31,8 @@ const { uploadObject, getPresignedUrl } = require('../utils/minio');
 const { extractClaims } = require('../services/mlOrchestrator');
 const { buildPassport } = require('../services/passportBuilder');
 const { resolveFindingEvidence } = require('../services/findingEvidence');
+const { getVersions, createDraftVersionOnAcceptedFix } = require('../services/versionManager');
+const { checkClaimShelfLife, determineReviewRouting } = require('../services/workflowEngine');
 
 const router = express.Router();
 
@@ -518,11 +520,46 @@ router.get('/:id/versions', async (req, res, next) => {
       });
     }
 
-    const versions = await DraftVersion.find({ draftId: id, orgId })
-      .sort({ versionNumber: 1 })
+    const versions = await getVersions(id, orgId);
+
+    return res.json({ success: true, data: versions, versions });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * GET /v1/drafts/:id/passport
+ *
+ * Retrieves the Brand Passport record associated with an approved draft.
+ */
+router.get('/:id/passport', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.org?._id || req.orgId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid draft ID "${id}".`,
+        code: 'INVALID_ID',
+      });
+    }
+
+    const passport = await Passport.findOne({ draftId: id, orgId })
+      .populate('approvers', 'name email role')
+      .sort({ timestamp: -1 })
       .lean();
 
-    return res.json({ data: versions });
+    if (!passport) {
+      return res.status(404).json({
+        success: false,
+        error: `Brand Passport was not found for draft "${id}".`,
+        code: 'NOT_FOUND',
+      });
+    }
+
+    return res.json(passport);
   } catch (err) {
     return next(err);
   }
@@ -718,9 +755,10 @@ router.post('/:id/review', async (req, res, next) => {
 
     // ── 6. Bulk-insert Finding documents (orgId-scoped) ─────────────────────
     let savedFindings = [];
+    let findingDocs = [];
 
     if (claims.length > 0) {
-      const findingDocs = await Promise.all(claims.map(async (claim) => {
+      findingDocs = await Promise.all(claims.map(async (claim) => {
         const resolved = await resolveFindingEvidence({ claim, orgId });
         return {
           orgId          : orgId,
@@ -742,8 +780,21 @@ router.post('/:id/review', async (req, res, next) => {
           status         : 'open',
         };
       }));
+    }
 
-      savedFindings = await Finding.insertMany(findingDocs, { ordered: false });
+    // ── 6b. Claim Shelf-Life logic (workflowEngine.js) ───────────────────────
+    // At review time check all retrieved passage expiry dates; if expired, create additional Finding with verdict = Outdated.
+    const shelfLifeFindings = await checkClaimShelfLife({
+      claims,
+      passages: req.body?.passages || [],
+      draftId: draft._id,
+      draftVersionId: draftVersion._id,
+      orgId,
+    });
+
+    const allFindings = [...findingDocs, ...shelfLifeFindings];
+    if (allFindings.length > 0) {
+      savedFindings = await Finding.insertMany(allFindings, { ordered: false });
     }
 
     // ── 7. Update draft status: draft → checked ──────────────────────────────
