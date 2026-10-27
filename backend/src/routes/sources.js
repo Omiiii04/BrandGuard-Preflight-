@@ -64,6 +64,17 @@ router.post('/', requireRole('creator', 'editor', 'manager', 'reviewer', 'admin'
       });
     }
 
+    // New uploads may only enter the active or ready state. Lifecycle states
+    // such as expired/superseded must be applied through the metadata update path.
+    if (!['active', 'ready'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'New source uploads must use status active or ready.',
+        code: 'INVALID_INITIAL_STATUS',
+      });
+    }
+    const requestedStatus = status;
+
     // Generate safe, unique storage key in MinIO: sources/<orgId>/<uuid>-<safeFilename>
     const randomSuffix = crypto.randomBytes(8).toString('hex');
     const safeBaseName = path
@@ -116,7 +127,6 @@ router.post('/', requireRole('creator', 'editor', 'manager', 'reviewer', 'admin'
     }
 
     // Save Source document to MongoDB
-    const requestedStatus = Source.SOURCE_STATUSES.includes(status) ? status : 'ready';
     const source = new Source({
       orgId,
       fileName: req.file.originalname,
@@ -339,6 +349,27 @@ router.patch('/:id', requireRole('manager', 'reviewer', 'admin', 'knowledge_owne
         });
       }
       source.status = status;
+    }
+
+    // Keep the durable ML index lifecycle metadata aligned with MongoDB. If
+    // the ML service is unavailable, fail the update rather than silently
+    // leaving stale passages eligible for evidence retrieval.
+    try {
+      await mlOrchestrator.updateSourceMetadata({
+        sourceId: source._id,
+        orgId,
+        status: source.status,
+        expiryDate: source.expiryDate,
+        ownerName: source.ownerName,
+        version: source.version,
+      });
+    } catch (syncErr) {
+      console.error('[sources] ML metadata sync error:', syncErr);
+      return res.status(502).json({
+        success: false,
+        error: 'Could not synchronize source lifecycle metadata with the ML index.',
+        code: 'SOURCE_METADATA_SYNC_FAILED',
+      });
     }
 
     await source.save();

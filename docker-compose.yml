@@ -43,7 +43,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
       - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml:8000}
-      - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:-brandguard-ml-internal-dev-token}
+      - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:?Set a strong random ML_INTERNAL_TOKEN in .env}
       - DEMO_MODE=${DEMO_MODE:-false}
       - JWT_SECRET=${JWT_SECRET:-brandguard-super-secret-jwt-key-2026}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
@@ -71,7 +71,7 @@ services:
     container_name: brandguard-ml
     restart: unless-stopped
     ports:
-      - "${ML_PORT:-8000}:8000"
+      - "127.0.0.1:${ML_PORT:-8000}:8000"
     environment:
       - PORT=8000
       - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/brandguard}
@@ -81,7 +81,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
       - INDEX_DIR=/app/indexes
-      - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:-brandguard-ml-internal-dev-token}
+      - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:?Set a strong random ML_INTERNAL_TOKEN in .env}
       - DEMO_MODE=${DEMO_MODE:-false}
     volumes:
       - faiss_data:/app/indexes

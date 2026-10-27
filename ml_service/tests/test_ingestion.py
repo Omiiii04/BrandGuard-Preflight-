@@ -2,6 +2,7 @@ import base64
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 import app.main as main
 from app.pipeline.indexer import PersistentLexicalIndex
@@ -21,21 +22,21 @@ def _payload(source_id="source-1", org_id="org-a"):
 
 
 def test_index_source_requires_internal_token(monkeypatch, tmp_path):
-    monkeypatch.setenv("ML_INTERNAL_TOKEN", "secret")
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
     monkeypatch.setattr(main, "INDEX", PersistentLexicalIndex(tmp_path))
 
     with pytest.raises(HTTPException) as error:
-        main.index_source(_payload(), "wrong")
+        main.index_source(_payload(), "wrong-token-value")
 
     assert error.value.status_code == 401
 
 
 def test_index_source_persists_uploaded_text_and_claims_retrieve_it(monkeypatch, tmp_path):
-    monkeypatch.setenv("ML_INTERNAL_TOKEN", "secret")
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
     monkeypatch.setenv("DEMO_MODE", "false")
     monkeypatch.setattr(main, "INDEX", PersistentLexicalIndex(tmp_path))
 
-    response = main.index_source(_payload(), "secret")
+    response = main.index_source(_payload(), "test-only-ml-internal-token-32-bytes-minimum")
     claims = main.extract_claims({
         "content": "Customers may return eligible items within 30 days of delivery.",
         "orgId": "org-a",
@@ -65,10 +66,10 @@ def test_normal_mode_does_not_fall_back_to_stellara_fixture(monkeypatch, tmp_pat
 
 
 def test_irrelevant_retrieved_passage_does_not_create_proof_reference(monkeypatch, tmp_path):
-    monkeypatch.setenv("ML_INTERNAL_TOKEN", "secret")
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
     monkeypatch.setenv("DEMO_MODE", "false")
     monkeypatch.setattr(main, "INDEX", PersistentLexicalIndex(tmp_path))
-    main.index_source(_payload(), "secret")
+    main.index_source(_payload(), "test-only-ml-internal-token-32-bytes-minimum")
 
     claims = main.extract_claims({
         "content": "Customers may return eligible items within 45 days of delivery.",
@@ -82,7 +83,7 @@ def test_irrelevant_retrieved_passage_does_not_create_proof_reference(monkeypatc
 
 
 def test_index_source_rejects_invalid_document(monkeypatch, tmp_path):
-    monkeypatch.setenv("ML_INTERNAL_TOKEN", "secret")
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
     monkeypatch.setattr(main, "INDEX", PersistentLexicalIndex(tmp_path))
     payload = _payload()
     payload["fileName"] = "broken.pdf"
@@ -90,8 +91,99 @@ def test_index_source_rejects_invalid_document(monkeypatch, tmp_path):
     payload["contentBase64"] = base64.b64encode(b"not a pdf").decode("ascii")
 
     with pytest.raises(HTTPException) as error:
-        main.index_source(payload, "secret")
+        main.index_source(payload, "test-only-ml-internal-token-32-bytes-minimum")
 
     assert error.value.status_code == 422
     assert error.value.detail["code"] == "INVALID_DOCUMENT"
 
+def test_internal_token_validator_rejects_missing_and_wrong_tokens(monkeypatch):
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
+
+    with pytest.raises(HTTPException) as missing:
+        main._validate_internal_token(None)
+    assert missing.value.status_code == 401
+
+    with pytest.raises(HTTPException) as wrong:
+        main._validate_internal_token("wrong-token-value")
+    assert wrong.value.status_code == 401
+
+    assert main._validate_internal_token("test-only-ml-internal-token-32-bytes-minimum") is None
+
+
+def test_known_development_token_is_rejected(monkeypatch):
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "brandguard-ml-internal-dev-token")
+
+    with pytest.raises(HTTPException) as error:
+        main._validate_internal_token("brandguard-ml-internal-dev-token")
+
+    assert error.value.status_code == 503
+
+
+def test_source_metadata_update_is_persisted_and_scoped(monkeypatch, tmp_path):
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
+    monkeypatch.setenv("DEMO_MODE", "false")
+    index = PersistentLexicalIndex(tmp_path)
+    monkeypatch.setattr(main, "INDEX", index)
+    main.index_source(_payload(source_id="source-1", org_id="org-a"), "test-only-ml-internal-token-32-bytes-minimum")
+    main.index_source(_payload(source_id="source-2", org_id="org-b"), "test-only-ml-internal-token-32-bytes-minimum")
+
+    response = main.update_source_metadata({
+        "sourceId": "source-1",
+        "orgId": "org-a",
+        "status": "superseded",
+        "expiryDate": "2026-01-01T00:00:00.000Z",
+    })
+
+    assert response["updated"] is True
+    assert response["passageCount"] == 1
+    org_a = index.passages_for_org("org-a")
+    org_b = index.passages_for_org("org-b")
+    assert org_a[0]["status"] == "superseded"
+    assert org_a[0]["expiryDate"] == "2026-01-01T00:00:00.000Z"
+    assert org_b[0]["status"] == "ready"
+
+
+def test_retrieval_excludes_inactive_lifecycle_states():
+    from app.pipeline.retriever import retrieve_passage
+
+    passages = [
+        {"passageId": status, "status": status, "text": "return policy within 30 days"}
+        for status in ("expired", "deleted", "blocked", "superseded", "processing", "error")
+    ]
+    assert retrieve_passage("return policy 30 days", passages) is None
+
+
+
+def test_http_private_post_endpoints_reject_missing_internal_token(monkeypatch):
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", "test-only-ml-internal-token-32-bytes-minimum")
+    client = TestClient(main.app)
+    cases = [
+        ("/index-source", _payload()),
+        ("/source-metadata", {"sourceId": "source-1", "orgId": "org-a", "status": "ready"}),
+        ("/extract-claims", {"content": "Hello."}),
+        ("/match", {"claim": "Hello."}),
+        ("/rewrite", {"claim": "Hello."}),
+        ("/premortem", {"content": "Hello.", "findings": []}),
+        ("/image-check", {"storageRef": "memory://image.png", "orgId": "org-a"}),
+        ("/detect-entities", {"content": "Hello.", "orgId": "org-a"}),
+    ]
+
+    for endpoint, payload in cases:
+        response = client.post(endpoint, json=payload)
+        assert response.status_code == 401, f"{endpoint} should require the internal token"
+
+
+def test_http_private_post_endpoint_accepts_configured_internal_token(monkeypatch):
+    token = "test-only-ml-internal-token-32-bytes-minimum"
+    monkeypatch.setenv("ML_INTERNAL_TOKEN", token)
+    monkeypatch.setenv("DEMO_MODE", "false")
+    client = TestClient(main.app)
+
+    response = client.post(
+        "/extract-claims",
+        json={"content": "Hello."},
+        headers={"X-ML-Internal-Token": token},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"claims": []}

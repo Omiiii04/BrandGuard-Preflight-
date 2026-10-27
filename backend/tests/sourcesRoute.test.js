@@ -24,20 +24,28 @@ describe('/v1/sources API Endpoints', () => {
   let testUserId;
   let authToken;
   let indexCalls;
+  let metadataCalls;
 
   // Stubs for MinIO & Mongo
   const originalUploadObject = minio.uploadObject;
   const originalGetPresignedUrl = minio.getPresignedUrl;
   const originalFindById = User.findById;
   const originalIndexSource = mlOrchestrator.indexSource;
+  const originalUpdateSourceMetadata = mlOrchestrator.updateSourceMetadata;
 
   before(async () => {
     testOrgId = new mongoose.Types.ObjectId();
     testUserId = new mongoose.Types.ObjectId();
     indexCalls = [];
+    metadataCalls = [];
     mlOrchestrator.indexSource = async (payload) => {
       indexCalls.push(payload);
       return { indexed: true, status: 'indexed', sourceId: String(payload.sourceId), orgId: String(payload.orgId), passageCount: 1 };
+    };
+
+    mlOrchestrator.updateSourceMetadata = async (payload) => {
+      metadataCalls.push(payload);
+      return { updated: true, sourceId: String(payload.sourceId), orgId: String(payload.orgId), passageCount: 1 };
     };
 
     // Generate valid JWT token
@@ -113,6 +121,7 @@ describe('/v1/sources API Endpoints', () => {
     minio.getPresignedUrl = originalGetPresignedUrl;
     User.findById = originalFindById;
     mlOrchestrator.indexSource = originalIndexSource;
+    mlOrchestrator.updateSourceMetadata = originalUpdateSourceMetadata;
 
     if (server) {
       await new Promise((resolve) => server.close(resolve));
