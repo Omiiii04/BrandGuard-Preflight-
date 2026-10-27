@@ -22,7 +22,7 @@ const Comment = require('../models/Comment');
 const Passport = require('../models/Passport');
 const { authenticate } = require('../middleware/auth');
 const { orgIsolation } = require('../middleware/orgIsolation');
-const { requireRole } = require('../middleware/rbac');
+const { requireRole, hasRole } = require('../middleware/rbac');
 const { performAvScan, MAX_FILE_SIZE } = require('../middleware/uploadScan');
 const { redactContent, loadOrgWatchlist } = require('../middleware/redactionGateway');
 const { sha256 } = require('../utils/hash');
@@ -1043,6 +1043,26 @@ router.post('/:id/comments', async (req, res, next) => {
       });
     }
 
+    if (normalisedAction === 'approve' && !hasRole(actor?.role, 'manager')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Insufficient privileges. Only managers can record approval actions.',
+        code: 'ROLE_INSUFFICIENT',
+        requiredRoles: ['manager'],
+        userRole: actor?.role,
+      });
+    }
+
+    if (normalisedAction === 'override' && !hasRole(actor?.role, ['reviewer', 'manager'])) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Insufficient privileges. Only reviewers or managers can record override actions.',
+        code: 'ROLE_INSUFFICIENT',
+        requiredRoles: ['reviewer', 'manager'],
+        userRole: actor?.role,
+      });
+    }
+
     if (normalisedAction === 'override' && (!reason || !String(reason).trim())) {
       return res.status(400).json({
         success: false,
@@ -1051,12 +1071,22 @@ router.post('/:id/comments', async (req, res, next) => {
       });
     }
 
-    if (findingId && !mongoose.Types.ObjectId.isValid(findingId)) {
-      return res.status(400).json({
-        success: false,
-        error: `Invalid finding ID "${findingId}".`,
-        code: 'INVALID_FINDING_ID',
-      });
+    if (findingId) {
+      if (!mongoose.Types.ObjectId.isValid(findingId)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid finding ID "${findingId}".`,
+          code: 'INVALID_FINDING_ID',
+        });
+      }
+      const existingFinding = await Finding.findOne({ _id: findingId, orgId, draftId: draft._id });
+      if (!existingFinding) {
+        return res.status(404).json({
+          success: false,
+          error: `Finding "${findingId}" was not found for this draft in your organisation.`,
+          code: 'FINDING_NOT_FOUND',
+        });
+      }
     }
 
     const targetCommentId = commentId || parentCommentId;

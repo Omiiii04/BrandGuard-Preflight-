@@ -44,7 +44,15 @@ class AppError extends Error {
     return new AppError(message, 401, code, details);
   }
 
+  static invalidJwt(message = 'Invalid or expired authentication token.', code = 'INVALID_TOKEN', details = null) {
+    return new AppError(message, 401, code, details);
+  }
+
   static forbidden(message = 'Forbidden: insufficient permissions.', code = 'FORBIDDEN', details = null) {
+    return new AppError(message, 403, code, details);
+  }
+
+  static forbiddenRole(message = 'Forbidden: user role has insufficient privileges.', code = 'ROLE_INSUFFICIENT', details = null) {
     return new AppError(message, 403, code, details);
   }
 
@@ -52,16 +60,33 @@ class AppError extends Error {
     return new AppError(message, 404, code, details);
   }
 
-  static validationError(message = 'Validation failed.', details = null, code = 'VALIDATION_ERROR') {
+  static draftNotFound(id = null, message = null) {
+    const msg = message || (id ? `Draft "${id}" was not found in your organisation.` : 'Draft not found in your organisation.');
+    return new AppError(msg, 404, 'DRAFT_NOT_FOUND', id ? { draftId: id } : null);
+  }
+
+  static validationError(message = 'Schema validation failed.', details = null, code = 'VALIDATION_ERROR') {
     return new AppError(message, 422, code, details);
+  }
+
+  static schemaValidationFailure(message = 'Schema validation failed.', details = null) {
+    return new AppError(message, 422, 'VALIDATION_ERROR', details);
   }
 
   static serviceUnavailable(message = 'Service temporarily unavailable.', code = 'SERVICE_UNAVAILABLE', details = null) {
     return new AppError(message, 503, code, details);
   }
 
-  static timeout(message = 'Request timed out.', code = 'ML_TIMEOUT', details = null) {
+  static timeout(message = 'ML service timed out.', code = 'ML_TIMEOUT', details = null) {
     return new AppError(message, 503, code, details);
+  }
+
+  static mlTimeout(message = 'ML service timed out.', details = null) {
+    return new AppError(message, 503, 'ML_TIMEOUT', details);
+  }
+
+  static uploadScanFailure(message = 'Upload scan validation failed.', code = 'UPLOAD_SCAN_FAILED', details = null) {
+    return new AppError(message, 400, code, details);
   }
 }
 
@@ -80,7 +105,13 @@ function notFoundHandler(req, res, _next) {
  * Global Express error handling middleware.
  *
  * Normalizes different error types (Mongoose, JWT, Multer, AppError, etc.)
- * into a consistent JSON response and strips out stack traces.
+ * into a consistent JSON response and strips out stack traces:
+ *   - 401 Unauthorized / Invalid JWT
+ *   - 403 Forbidden / Forbidden Role
+ *   - 404 Not Found / Draft Not Found
+ *   - 503 Service Unavailable / ML Timeout
+ *   - 422 Unprocessable Entity / Schema Validation Failure
+ *   - 400 Bad Request / Upload Scan Failure
  */
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, _next) {
@@ -89,59 +120,126 @@ function errorHandler(err, req, res, _next) {
   let message = err.message || 'An unexpected error occurred.';
   let details = err.details || null;
 
-  // 1. Mongoose Schema Validation Error -> 422
-  if (err.name === 'ValidationError' && err.errors) {
-    statusCode = 422;
-    code = 'VALIDATION_ERROR';
-    message = 'Schema validation failed.';
-    details = Object.keys(err.errors).reduce((acc, key) => {
-      acc[key] = err.errors[key].message;
-      return acc;
-    }, {});
-  }
-
-  // 2. Mongoose Invalid ObjectId (CastError) -> 400
-  if (err.name === 'CastError' && err.kind === 'ObjectId') {
-    statusCode = 400;
-    code = 'INVALID_ID';
-    message = `Invalid ID format for parameter "${err.path}".`;
-  }
-
-  // 3. JWT Authentication Errors -> 401
-  if (err.name === 'JsonWebTokenError') {
+  // 1. JWT Authentication Errors -> 401
+  if (
+    err.name === 'JsonWebTokenError' ||
+    err.name === 'TokenExpiredError' ||
+    err.name === 'NotBeforeError' ||
+    code === 'INVALID_TOKEN' ||
+    code === 'TOKEN_EXPIRED' ||
+    code === 'TOKEN_NOT_ACTIVE' ||
+    code === 'UNAUTHENTICATED' ||
+    statusCode === 401
+  ) {
     statusCode = 401;
-    code = 'INVALID_TOKEN';
-    message = 'Invalid or malformed authentication token.';
-  } else if (err.name === 'TokenExpiredError') {
-    statusCode = 401;
-    code = 'TOKEN_EXPIRED';
-    message = 'Authentication token has expired. Please sign in again.';
-  }
-
-  // 4. Multer Upload Errors -> 400
-  if (err.name === 'MulterError') {
-    statusCode = 400;
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      code = 'FILE_TOO_LARGE';
-      message = 'Uploaded file exceeds the maximum allowed size limit.';
-    } else {
-      code = 'UPLOAD_ERROR';
-      message = `File upload error: ${err.message}`;
+    if (err.name === 'JsonWebTokenError') {
+      code = 'INVALID_TOKEN';
+      message = 'Invalid or malformed authentication token.';
+    } else if (err.name === 'TokenExpiredError') {
+      code = 'TOKEN_EXPIRED';
+      message = 'Authentication token has expired. Please sign in again.';
+    } else if (err.name === 'NotBeforeError') {
+      code = 'TOKEN_NOT_ACTIVE';
+      message = 'Authentication token is not yet active.';
+    } else if (!code || code === 'INTERNAL_ERROR') {
+      code = 'UNAUTHORIZED';
     }
   }
 
-  // 5. JSON Parse / Syntax Error in request body -> 400
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    statusCode = 400;
-    code = 'INVALID_JSON';
-    message = 'Malformed JSON body in request.';
+  // 2. Forbidden Role & Insufficient Privileges -> 403
+  else if (
+    code === 'ROLE_INSUFFICIENT' ||
+    code === 'NO_ROLE_ASSIGNED' ||
+    code === 'FORBIDDEN' ||
+    statusCode === 403
+  ) {
+    statusCode = 403;
+    if (!code || code === 'INTERNAL_ERROR') {
+      code = 'FORBIDDEN';
+    }
   }
 
-  // 6. ML Service Timeout or Connection Refused -> 503
-  if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || err.code === 'ML_TIMEOUT') {
+  // 3. Draft Not Found & Resource Not Found -> 404
+  else if (
+    code === 'DRAFT_NOT_FOUND' ||
+    code === 'NOT_FOUND' ||
+    code === 'FINDING_NOT_FOUND' ||
+    code === 'SOURCE_NOT_FOUND' ||
+    code === 'COMMENT_NOT_FOUND' ||
+    statusCode === 404
+  ) {
+    statusCode = 404;
+    if (!code || code === 'INTERNAL_ERROR') {
+      code = 'NOT_FOUND';
+    }
+  }
+
+  // 4. ML Service Timeout or Connection Refused -> 503
+  else if (
+    code === 'ML_TIMEOUT' ||
+    err.code === 'ECONNREFUSED' ||
+    err.code === 'ETIMEDOUT' ||
+    code === 'SERVICE_UNAVAILABLE' ||
+    err.name === 'TimeoutError' ||
+    err.type === 'timeout' ||
+    /ml.*time(d)?\s*out/i.test(err.message || '') ||
+    statusCode === 503
+  ) {
     statusCode = 503;
-    code = err.code === 'ML_TIMEOUT' ? 'ML_TIMEOUT' : 'SERVICE_UNAVAILABLE';
-    message = 'ML service is currently unavailable or timed out.';
+    code = (code === 'ML_TIMEOUT' || /ml/i.test(err.message || '')) ? 'ML_TIMEOUT' : 'SERVICE_UNAVAILABLE';
+    message = err.message || 'ML service is currently unavailable or timed out.';
+  }
+
+  // 5. Schema Validation Failure (Mongoose or custom) -> 422
+  else if (
+    (err.name === 'ValidationError' && err.errors) ||
+    code === 'VALIDATION_ERROR' ||
+    code === 'SCHEMA_VALIDATION_FAILED' ||
+    statusCode === 422
+  ) {
+    statusCode = 422;
+    code = code && code !== 'INTERNAL_ERROR' ? code : 'VALIDATION_ERROR';
+    if (err.name === 'ValidationError' && err.errors) {
+      message = 'Schema validation failed.';
+      details = Object.keys(err.errors).reduce((acc, key) => {
+        acc[key] = err.errors[key].message;
+        return acc;
+      }, {});
+    }
+  }
+
+  // 6. Upload Scan Failure, Multer Errors, Malformed JSON or Invalid IDs -> 400
+  else if (
+    code === 'UPLOAD_SCAN_FAILED' ||
+    code === 'AV_SCAN_FAILED' ||
+    code === 'VIRUS_DETECTED' ||
+    code === 'INVALID_FILE_TYPE' ||
+    code === 'FILE_TOO_LARGE' ||
+    code === 'MISSING_FILE' ||
+    code === 'UPLOAD_ERROR' ||
+    err.name === 'MulterError' ||
+    (err.name === 'CastError' && err.kind === 'ObjectId') ||
+    (err instanceof SyntaxError && err.status === 400 && 'body' in err) ||
+    statusCode === 400
+  ) {
+    statusCode = 400;
+    if (err.name === 'MulterError') {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        code = 'FILE_TOO_LARGE';
+        message = 'Uploaded file exceeds the maximum allowed size limit.';
+      } else {
+        code = 'UPLOAD_ERROR';
+        message = `File upload error: ${err.message}`;
+      }
+    } else if (err.name === 'CastError' && err.kind === 'ObjectId') {
+      code = 'INVALID_ID';
+      message = `Invalid ID format for parameter "${err.path}".`;
+    } else if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+      code = 'INVALID_JSON';
+      message = 'Malformed JSON body in request.';
+    } else if (!code || code === 'INTERNAL_ERROR') {
+      code = 'BAD_REQUEST';
+    }
   }
 
   // Internal 500 error sanitization in production: hide raw error details
@@ -156,15 +254,28 @@ function errorHandler(err, req, res, _next) {
     console.error(`[errorHandler] ${statusCode} ${code}: ${err.message}`, err.stack || err);
   }
 
+  // Strictly enforce structured format: { success: false, error: string, code: string, details?: any }
+  // Never leak stack traces into the HTTP response under ANY circumstances
   const responseBody = {
     success: false,
     error: message,
     code,
   };
 
-  if (details) {
-    responseBody.details = details;
+  if (details !== null && details !== undefined) {
+    if (typeof details === 'object') {
+      const cleanDetails = Array.isArray(details) ? [...details] : { ...details };
+      delete cleanDetails.stack;
+      delete cleanDetails.stackTrace;
+      responseBody.details = cleanDetails;
+    } else {
+      responseBody.details = details;
+    }
   }
+
+  // Double guard: Ensure stack properties are never attached to responseBody
+  delete responseBody.stack;
+  delete responseBody.stackTrace;
 
   return res.status(statusCode).json(responseBody);
 }
