@@ -17,14 +17,15 @@ def _active(passage: dict[str, Any], check_expiry: bool = True) -> bool:
     status = str(passage.get("status") or "ready").lower()
     if status in EXCLUDED_STATUSES:
         return False
-    expiry = passage.get("expiryDate") if check_expiry else None
+    expiry = passage.get("expiryDate")
     if expiry:
         try:
-            if date.fromisoformat(str(expiry)[:10]) < date.today():
+            expiry_date = date.fromisoformat(str(expiry)[:10])
+            if check_expiry and expiry_date < date.today():
                 return False
         except ValueError:
             # Invalid expiry metadata must fail closed rather than treating stale
-            # evidence as current.
+            # evidence as current, even when preserving an Outdated verdict.
             return False
     return True
 
