@@ -64,6 +64,9 @@ app.use('/v1/passports', passportsRouter);
 const insightsRouter = require('./routes/insights');
 app.use('/v1/insights', insightsRouter);
 
+const orgsRouter = require('./routes/orgs');
+app.use('/v1/orgs', orgsRouter);
+
 // ── Error handling middleware ────────────────────────────────────────────────
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 app.use(notFoundHandler);

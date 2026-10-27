@@ -649,6 +649,114 @@ router.get('/:id/findings', async (req, res, next) => {
 });
 
 /**
+ * POST /v1/drafts/redaction-preview
+ *
+ * Previews what content (after redaction) would be sent before any external ML call.
+ * Accepts { content } or { draftContent } in request body.
+ */
+router.post('/redaction-preview', async (req, res, next) => {
+  try {
+    const orgId = req.org?._id || req.orgId || req.user?.orgId;
+    const content = req.body?.content || req.body?.draftContent || req.draftContent || '';
+
+    const watchlist = await loadOrgWatchlist(orgId, req.org);
+    const result = redactContent(content, watchlist);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        original: result.original,
+        redactedContent: result.redactedContent,
+        hasRedactions: result.hasRedactions,
+        totalReplacements: result.totalReplacements,
+        redactions: result.redactions,
+        whatWasRemoved: result.redactions.map((r) => ({
+          term: r.term,
+          count: r.count,
+          category: 'confidential_watchlist',
+          replacement: '[REDACTED]',
+        })),
+        provider: {
+          name: 'BrandGuard ML Service / External LLM',
+          type: 'Language Model Inference',
+          destination: 'External Review Service',
+        },
+        rulesOnlyRecommended: result.hasRedactions,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * Helper to generate redaction preview for a specific draft ID.
+ */
+async function getDraftRedactionPreview(req, res, next) {
+  try {
+    const { id } = req.params;
+    const orgId = req.org?._id || req.orgId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid draft ID "${id}".`,
+        code: 'INVALID_ID',
+      });
+    }
+
+    const draft = await Draft.findOne({ _id: id, orgId }).lean();
+    if (!draft) {
+      return res.status(404).json({
+        success: false,
+        error: `Draft "${id}" was not found in your organisation.`,
+        code: 'DRAFT_NOT_FOUND',
+      });
+    }
+
+    let content = req.body?.content;
+    if (typeof content !== 'string') {
+      const draftVersion = await DraftVersion.findOne({ draftId: draft._id, orgId })
+        .sort({ versionNumber: -1 })
+        .lean();
+      content = draftVersion?.content || '';
+    }
+
+    const watchlist = await loadOrgWatchlist(orgId, req.org);
+    const result = redactContent(content, watchlist);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        draftId: id,
+        original: result.original,
+        redactedContent: result.redactedContent,
+        hasRedactions: result.hasRedactions,
+        totalReplacements: result.totalReplacements,
+        redactions: result.redactions,
+        whatWasRemoved: result.redactions.map((r) => ({
+          term: r.term,
+          count: r.count,
+          category: 'confidential_watchlist',
+          replacement: '[REDACTED]',
+        })),
+        provider: {
+          name: 'BrandGuard ML Service / External LLM',
+          type: 'Language Model Inference',
+          destination: 'External Review Service',
+        },
+        rulesOnlyRecommended: result.hasRedactions,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+router.get('/:id/redaction-preview', getDraftRedactionPreview);
+router.post('/:id/redaction-preview', getDraftRedactionPreview);
+
+/**
  * POST /v1/drafts/:id/review
  *
  * Triggers the ML compliance review pipeline for a submitted draft.
@@ -723,6 +831,23 @@ router.post('/:id/review', async (req, res, next) => {
       );
     }
 
+    // ── Check if organisation has rules_only enabled ─────────────────────────
+    const Org = require('../models/Org');
+    let isRulesOnly = Boolean(
+      req.org?.settings?.rules_only ||
+      req.org?.rules_only ||
+      req.body?.rulesOnly
+    );
+
+    if (!isRulesOnly && orgId) {
+      try {
+        const orgDoc = await Org.findById(orgId).select('settings').lean();
+        if (orgDoc?.settings?.rules_only) {
+          isRulesOnly = true;
+        }
+      } catch (_e) {}
+    }
+
     // ── 5. Call ML Orchestrator ─────────────────────────────────────────────
     let claims;
     try {
@@ -732,6 +857,7 @@ router.post('/:id/review', async (req, res, next) => {
         intent          : draft.intent,
         draftId         : draft._id,
         actor,
+        rulesOnly       : isRulesOnly,
       });
     } catch (mlErr) {
       const mlCode = mlErr.code || 'ML_ERROR';

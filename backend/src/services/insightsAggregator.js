@@ -192,9 +192,11 @@ async function getRuleInsights(orgId) {
       totalTriggered > 0 ? parseFloat((stats.overrideCount / totalTriggered).toFixed(2)) : 0;
 
     results.push({
+      rule: ruleId,
       ruleId,
       description: stats.description,
       overrideRate,
+      suggestedRewording: null,
       totalTriggered,
       flagsCount: stats.flagsCount,
       overrideCount: stats.overrideCount,
@@ -203,6 +205,60 @@ async function getRuleInsights(orgId) {
 
   // Sort by overrideRate descending, then totalTriggered descending
   results.sort((a, b) => b.overrideRate - a.overrideRate || b.totalTriggered - a.totalTriggered);
+
+  // Guideline Debugger logic: for rules with override rate > 50%, suggest clearer rewording via /rewrite ML call
+  const mlOrchestrator = require('./mlOrchestrator');
+  for (const item of results) {
+    item.rule = item.ruleId;
+
+    if (item.overrideRate > 0.5) {
+      // Query/filter findings for this rule
+      const ruleFindings = findings.filter(
+        (f) =>
+          f.ruleId === item.ruleId ||
+          (f.verdict && `rule.${f.verdict.toLowerCase().replace(/\s+/g, '_')}` === item.ruleId)
+      );
+
+      let sampleText = item.description;
+      for (const rf of ruleFindings) {
+        if (rf.draftSpan || rf.suggestedFix || rf.reason) {
+          sampleText = rf.draftSpan || rf.suggestedFix || rf.reason;
+          break;
+        }
+      }
+
+      let rewording = null;
+      try {
+        if (typeof mlOrchestrator.rewriteClaim === 'function') {
+          const rewriteResult = await mlOrchestrator.rewriteClaim({
+            rule: item.ruleId,
+            ruleId: item.ruleId,
+            description: item.description,
+            claim: {
+              text: sampleText,
+              ruleId: item.ruleId,
+              verdict: 'Contradicted',
+            },
+            originalText: sampleText,
+            orgId: orgObjectId,
+          });
+          rewording = rewriteResult?.suggestedRewording || rewriteResult?.suggestedFix || null;
+        }
+      } catch (_e) {
+        // Fallback handled below
+      }
+
+      if (!rewording) {
+        rewording =
+          mlOrchestrator.DEFAULT_RULE_REWORDINGS?.[item.ruleId] ||
+          `Guideline rule "${item.ruleId}" must state explicit, verifiable compliance benchmarks.`;
+      }
+
+      item.suggestedRewording = rewording;
+    } else {
+      item.suggestedRewording = null;
+    }
+  }
 
   return results;
 }

@@ -72,6 +72,7 @@ const ML_RESPONSE_TYPES = {
   CLASSIFY        : 'classify',
   INDEX_PASSAGE   : 'index-passage',
   SIMILARITY      : 'similarity',
+  REWRITE         : 'rewrite',
 };
 
 // ---------------------------------------------------------------------------
@@ -557,6 +558,32 @@ function validateSimilarityResponse(body) {
   return { valid: true };
 }
 
+/**
+ * Validates the /rewrite ML response envelope.
+ *
+ * Expected shape:
+ *   {
+ *     suggestedFix?       : string
+ *     suggestedRewording? : string
+ *     meaningCheck?       : { kept?, changed?, dropped? }
+ *   }
+ *
+ * @param {unknown} body
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateRewriteResponse(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { valid: false, error: 'rewrite response body must be a JSON object' };
+  }
+  if (body.suggestedFix !== undefined && typeof body.suggestedFix !== 'string') {
+    return { valid: false, error: 'suggestedFix must be a string' };
+  }
+  if (body.suggestedRewording !== undefined && typeof body.suggestedRewording !== 'string') {
+    return { valid: false, error: 'suggestedRewording must be a string' };
+  }
+  return { valid: true };
+}
+
 // ---------------------------------------------------------------------------
 // Validator registry and dispatcher
 // ---------------------------------------------------------------------------
@@ -572,6 +599,7 @@ const ML_VALIDATORS = {
   [ML_RESPONSE_TYPES.CLASSIFY]       : validateClassifyResponse,
   [ML_RESPONSE_TYPES.INDEX_PASSAGE]  : validateIndexResponse,
   [ML_RESPONSE_TYPES.SIMILARITY]     : validateSimilarityResponse,
+  [ML_RESPONSE_TYPES.REWRITE]        : validateRewriteResponse,
 };
 
 /**
@@ -702,8 +730,214 @@ async function indexSource({
   return rawResponse;
 }
 
+// ---------------------------------------------------------------------------
+// Exact-rule extraction (deterministic, zero external calls)
+// ---------------------------------------------------------------------------
+
+const EXACT_SUPERLATIVE_RE = /\b(?:best|only|fastest|leading|number one|#1)\b[^.!?,;:\n]*?(?=\s+(?:for|with|and|to|of)\b|[.!?,;:\n]|$)/gi;
+const EXACT_OUTDATED_RETURN_RE = /\b(?:within\s+)?14[-\s]days?(?:\s+of\s+(?:the\s+)?delivery(?:\s+date)?)?\b/gi;
+const EXACT_COST_CLAIM_RE = /\b(?:free\s+returns?|zero\s+restocking|free\s+delivery|zero[\s-]cost|free\s+of\s+charge)\b/gi;
+
+function escapeRegexStr(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Extracts exact-rule findings deterministically without making any external LM calls.
+ * Used when organisation setting `rules_only = true` is enabled or LM is bypassed.
+ *
+ * @param {string} content - Redacted draft content
+ * @param {object} [options={}]
+ * @param {Array<string>} [options.bannedTerms]
+ * @returns {Array<object>} Formatted claim findings
+ */
+function extractExactRuleFindings(content, options = {}) {
+  const text = String(content || '');
+  const findings = [];
+  const bannedTerms = Array.isArray(options.bannedTerms) ? options.bannedTerms : [];
+
+  // 1. Unqualified superlatives
+  let match;
+  const supRegex = new RegExp(EXACT_SUPERLATIVE_RE.source, 'gi');
+  while ((match = supRegex.exec(text)) !== null) {
+    const spanText = match[0].trim();
+    findings.push({
+      span: { start: match.index, end: match.index + spanText.length },
+      type: 'violation',
+      verdict: 'Contradicted',
+      confidence: 1.0,
+      ruleId: 'rule.superlative.unqualified',
+      explanation: 'An unqualified superlative is not permitted without substantiation.',
+      suggestedFix: 'We offer a 30-day returns policy.',
+      draftSpan: spanText,
+      meaningCheck: { kept: [], changed: [], dropped: [] },
+    });
+  }
+
+  // 2. Outdated returns window (14-day superseded by 30-day)
+  const retRegex = new RegExp(EXACT_OUTDATED_RETURN_RE.source, 'gi');
+  while ((match = retRegex.exec(text)) !== null) {
+    const spanText = match[0].trim();
+    findings.push({
+      span: { start: match.index, end: match.index + spanText.length },
+      type: 'violation',
+      verdict: 'Outdated',
+      confidence: 0.95,
+      ruleId: 'rule.date.outdated',
+      explanation: 'Prior policy documents referencing a 14-day window are superseded. The standard window is 30 days.',
+      suggestedFix: 'Our 30-day return window applies to eligible items.',
+      draftSpan: spanText,
+      meaningCheck: { kept: [], changed: [], dropped: [] },
+    });
+  }
+
+  // 3. Unverified cost claims
+  const costRegex = new RegExp(EXACT_COST_CLAIM_RE.source, 'gi');
+  while ((match = costRegex.exec(text)) !== null) {
+    const spanText = match[0].trim();
+    findings.push({
+      span: { start: match.index, end: match.index + spanText.length },
+      type: 'question',
+      verdict: 'Not Found',
+      confidence: 0.85,
+      ruleId: 'rule.cost.claim',
+      explanation: 'Unverified pricing or free-of-charge claim without supporting documentation.',
+      suggestedFix: '',
+      draftSpan: spanText,
+      meaningCheck: { kept: [], changed: [], dropped: [] },
+    });
+  }
+
+  // 4. Banned terms / watchlist terms
+  for (const term of bannedTerms) {
+    if (!term || typeof term !== 'string' || !term.trim()) continue;
+    const termRegex = new RegExp(`\\b${escapeRegexStr(term.trim())}\\b`, 'gi');
+    while ((match = termRegex.exec(text)) !== null) {
+      const spanText = match[0].trim();
+      findings.push({
+        span: { start: match.index, end: match.index + spanText.length },
+        type: 'violation',
+        verdict: 'Contradicted',
+        confidence: 1.0,
+        ruleId: 'rule.banned-term',
+        explanation: `Restricted or embargoed term "${term}" detected.`,
+        suggestedFix: '',
+        draftSpan: spanText,
+        meaningCheck: { kept: [], changed: [], dropped: [] },
+      });
+    }
+  }
+
+  // Sort deterministically by start offset
+  findings.sort((a, b) => a.span.start - b.span.start);
+  return findings;
+}
+
+/**
+ * Standard rule rewordings used for fallback or when offline.
+ */
+const DEFAULT_RULE_REWORDINGS = {
+  'rule.superlative.unqualified':
+    'Claims must avoid unverified superlatives ("best", "market leader"). State verified benchmark numbers or certified laboratory test data instead.',
+  'rule.date.outdated':
+    'Specify standard 30-day return window from physical delivery timestamp, referencing current Customer Terms v4.0.',
+  'rule.cost.claim':
+    'Free return phrasing is allowed only for domestic orders with original packaging intact.',
+  'rule.contradiction':
+    'Ensure product availability and returns eligibility match current published support guidelines.',
+  'rule.unsupported':
+    'Every factual claim must cite an approved active source document with matching passage proof.',
+  'rule.meaning.changed':
+    'Preserve mandatory approved brand terminology without altering core meaning.',
+};
+
+/**
+ * Calls the ML service POST /rewrite endpoint to suggest clearer rewording for a rule or claim.
+ *
+ * @param {object} params
+ * @param {object|string} [params.claim]
+ * @param {string} [params.rule]
+ * @param {string} [params.ruleId]
+ * @param {string} [params.description]
+ * @param {string} [params.originalText]
+ * @param {object} [params.intent]
+ * @param {Array<object>} [params.passages]
+ * @param {string|import('mongoose').Types.ObjectId} [params.orgId]
+ * @param {number} [params.timeoutMs]
+ * @returns {Promise<{ suggestedFix: string, suggestedRewording: string, meaningCheck: object }>}
+ */
+async function rewriteClaim({
+  claim,
+  rule        = null,
+  ruleId      = null,
+  description = '',
+  originalText = '',
+  intent      = {},
+  passages    = [],
+  orgId       = '',
+  timeoutMs   = DEFAULT_TIMEOUT_MS,
+}) {
+  const rId = ruleId || rule || (typeof claim === 'object' ? claim?.ruleId : null);
+  const mlBaseUrl = (process.env.ML_SERVICE_URL || '').replace(/\/$/, '');
+
+  const defaultRewording =
+    DEFAULT_RULE_REWORDINGS[rId] ||
+    (description ? `Refine guideline: ${description}. Must include verifiable compliance criteria.` : 'Guideline rule must specify clear, verifiable compliance criteria.');
+
+  if (!mlBaseUrl) {
+    return {
+      suggestedFix: defaultRewording,
+      suggestedRewording: defaultRewording,
+      meaningCheck: { kept: [], changed: [], dropped: [] },
+    };
+  }
+
+  const targetUrl = `${mlBaseUrl}/rewrite`;
+  const claimPayload =
+    typeof claim === 'object' && claim !== null
+      ? claim
+      : { text: String(claim || originalText || description || '') };
+
+  const payload = {
+    claim: claimPayload,
+    rule: rId,
+    ruleId: rId,
+    originalText: String(originalText || claimPayload.text || description || ''),
+    intent: {
+      purpose: intent?.purpose || '',
+      audience: intent?.audience || '',
+      mustSay: Array.isArray(intent?.mustSay) ? intent.mustSay : [],
+    },
+    passages: Array.isArray(passages) ? passages : [],
+    orgId: String(orgId || ''),
+  };
+
+  try {
+    const rawResponse = await postJson(targetUrl, payload, timeoutMs);
+    const suggestedFix = rawResponse?.suggestedFix || '';
+    const suggestedRewording =
+      rawResponse?.suggestedRewording ||
+      suggestedFix ||
+      defaultRewording;
+
+    return {
+      suggestedFix,
+      suggestedRewording,
+      meaningCheck: rawResponse?.meaningCheck || { kept: [], changed: [], dropped: [] },
+    };
+  } catch (err) {
+    console.warn(`[mlOrchestrator] /rewrite call failed: ${err.message}. Using default rewording fallback.`);
+    return {
+      suggestedFix: defaultRewording,
+      suggestedRewording: defaultRewording,
+      meaningCheck: { kept: [], changed: [], dropped: [] },
+    };
+  }
+}
+
 /**
  * Calls the ML service POST /extract-claims endpoint with redacted content.
+ * If rulesOnly is true, skips all LM / HTTP calls and returns exact-rule findings.
  *
  * Orchestration steps:
  *   1. Resolve ML_SERVICE_URL — throw immediately if not configured.
@@ -719,6 +953,7 @@ async function indexSource({
  * @param {object} [params.intent]                   - Draft intent (purpose / audience / mustSay)
  * @param {string|import('mongoose').Types.ObjectId} [params.draftId] - Draft ID for audit context
  * @param {string|import('mongoose').Types.ObjectId} [params.actor]   - User ID for audit context
+ * @param {boolean} [params.rulesOnly=false]         - If true, skip LM calls and return only exact-rule findings
  * @param {number} [params.timeoutMs]                - Override timeout in ms
  * @returns {Promise<Array<object>>} Validated claim objects
  *
@@ -736,8 +971,28 @@ async function extractClaims({
   intent    = {},
   draftId   = null,
   actor     = null,
+  rulesOnly = false,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
+  // ── Rules-only mode: Skip all LM calls and return exact-rule findings only ───
+  if (rulesOnly) {
+    console.log(`[mlOrchestrator] rules_only=true: skipping all LM calls for org ${orgId}`);
+
+    await logEventSafe({
+      orgId,
+      actor,
+      eventType  : AUDIT_EVENTS.RULES_ONLY_FALLBACK,
+      entityType : 'draft',
+      entityId   : draftId,
+      metadata   : {
+        reason        : 'Org setting rules_only enabled; skipped all LM calls',
+        contentLength : (redactedContent || '').length,
+      },
+    });
+
+    return extractExactRuleFindings(redactedContent, { orgId, intent });
+  }
+
   // ── 0. Resolve ML service base URL ─────────────────────────────────────────
   const mlBaseUrl = (process.env.ML_SERVICE_URL || '').replace(/\/$/, '');
   if (!mlBaseUrl) {
@@ -835,7 +1090,10 @@ module.exports = {
   // Core orchestration
   indexSource,
   extractClaims,
+  rewriteClaim,
+  extractExactRuleFindings,
   DEFAULT_TIMEOUT_MS,
+  DEFAULT_RULE_REWORDINGS,
 
   // Response type constants
   ML_RESPONSE_TYPES,
@@ -848,6 +1106,7 @@ module.exports = {
   validateIndexResponse,
   validateSourceIndexResponse,
   validateSimilarityResponse,
+  validateRewriteResponse,
 
   // Sub-validators (exported for unit testing)
   validateClaim,

@@ -34,6 +34,7 @@ const AUDIT_EVENTS = {
   CONFIDENTIAL_TERM_BLOCKED: 'confidential_term_blocked',
   ML_RESPONSE_DISCARDED: 'ml_response_discarded',
   FACT_ADDED: 'fact_added',
+  RULES_ONLY_FALLBACK: 'rules_only_fallback',
 };
 
 /**

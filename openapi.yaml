@@ -848,6 +848,87 @@ components:
         message:
           type: string
 
+    RuleInsightItem:
+      type: object
+      required: [rule, overrideRate]
+      properties:
+        rule:
+          type: string
+          example: "rule.superlative.unqualified"
+        ruleId:
+          type: string
+          example: "rule.superlative.unqualified"
+        description:
+          type: string
+          example: "Unqualified superlative detected"
+        overrideRate:
+          type: number
+          format: float
+          example: 0.67
+        suggestedRewording:
+          type: string
+          nullable: true
+          example: "Claims must avoid unverified superlatives (\"best\", \"market leader\"). State verified benchmark numbers."
+        totalTriggered:
+          type: integer
+          example: 18
+        flagsCount:
+          type: integer
+          example: 18
+        overrideCount:
+          type: integer
+          example: 12
+
+    RulesInsightResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuleInsightItem"
+
+    RedactionPreviewResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            draftId:
+              type: string
+            original:
+              type: string
+            redactedContent:
+              type: string
+            hasRedactions:
+              type: boolean
+            totalReplacements:
+              type: integer
+            redactions:
+              type: array
+              items:
+                type: object
+                properties:
+                  term:
+                    type: string
+                  count:
+                    type: integer
+            whatWasRemoved:
+              type: array
+              items:
+                type: object
+            provider:
+              type: object
+            rulesOnlyRecommended:
+              type: boolean
+
     ImageCheckRequest:
       type: object
       required: [storageRef, orgId]
@@ -1228,6 +1309,75 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /v1/drafts/redaction-preview:
+    post:
+      tags: [Drafts]
+      summary: Redaction preview before external ML review
+      description: Returns preview of what content (after redaction) would be sent externally.
+      operationId: previewRedaction
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+      responses:
+        "200":
+          description: Redacted preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedactionPreviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/drafts/{id}/redaction-preview:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/ObjectId"
+    get:
+      tags: [Drafts]
+      summary: Preview redacted content for a draft
+      operationId: getDraftRedactionPreview
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Redacted preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedactionPreviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Drafts]
+      summary: Preview redacted content for a draft with optional override body
+      operationId: postDraftRedactionPreview
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Redacted preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedactionPreviewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /v1/drafts/{id}:
     parameters:

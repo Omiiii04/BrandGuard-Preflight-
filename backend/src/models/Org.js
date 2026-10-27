@@ -34,6 +34,7 @@ const orgSchema = new mongoose.Schema(
       allowExternalModel: { type: Boolean, default: false }, // allow OpenAI calls
       shelfLifeWarnDays:  { type: Number,  default: 30 },    // days before source expiry
       maxUploadBytes:     { type: Number,  default: 10 * 1024 * 1024 }, // 10 MB
+      rules_only:         { type: Boolean, default: false }, // rules-only mode: skips LM calls
     },
 
     /**

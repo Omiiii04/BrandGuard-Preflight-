@@ -177,6 +177,7 @@ def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
     passages = _passages_for_request(payload)
     guidelines = payload.get("guidelines") if isinstance(payload.get("guidelines"), dict) else {}
     image_context = payload.get("imageContext") if isinstance(payload.get("imageContext"), dict) else None
+    rules_only = bool(payload.get("rulesOnly") or payload.get("rules_only"))
     claims = extract_claims_pipeline(
         content,
         passages,
@@ -185,6 +186,8 @@ def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
         guidelines.get("bannedTerms", []),
         image_context,
     )
+    if rules_only:
+        claims = [c for c in claims if c.get("ruleId")]
     return {"claims": claims}
 
 
@@ -205,15 +208,52 @@ def match_passages(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"matches": matches}
 
 
+RULE_REWORDINGS: Dict[str, str] = {
+    "rule.superlative.unqualified": (
+        'Claims must avoid unverified superlatives ("best", "market leader"). '
+        'State verified benchmark numbers or certified laboratory test data instead.'
+    ),
+    "rule.date.outdated": (
+        'Specify standard 30-day return window from physical delivery timestamp, '
+        'referencing current Customer Terms v4.0.'
+    ),
+    "rule.cost.claim": (
+        'Free return phrasing is allowed only for domestic orders with original packaging intact.'
+    ),
+    "rule.contradiction": (
+        'Ensure product availability and returns eligibility match current published support guidelines.'
+    ),
+    "rule.unsupported": (
+        'Every factual claim must cite an approved active source document with matching passage proof.'
+    ),
+    "rule.meaning.changed": (
+        'Preserve mandatory approved brand terminology without altering core meaning.'
+    ),
+}
+
+
 @app.post("/rewrite")
 def rewrite_claim(payload: Dict[str, Any]) -> Dict[str, Any]:
+    rule_id = payload.get("rule") or payload.get("ruleId")
+    if not rule_id and isinstance(payload.get("claim"), dict):
+        rule_id = payload["claim"].get("ruleId") or payload["claim"].get("rule")
+
+    suggested_rewording = RULE_REWORDINGS.get(str(rule_id)) if rule_id else None
+
     claim = payload.get("claim", {})
     claim_text = claim.get("text", "") if isinstance(claim, dict) else str(claim)
     verdict = claim.get("verdict", "Not Found") if isinstance(claim, dict) else str(payload.get("verdict", "Not Found"))
     fix = suggested_fix(claim_text, verdict)
+
+    if not suggested_rewording and fix:
+        suggested_rewording = fix
+    elif not fix and suggested_rewording:
+        fix = suggested_rewording
+
     return {
-        "suggestedFix": fix,
-        "meaningCheck": meaning_check(payload.get("originalText", claim_text), fix, payload.get("intent")),
+        "suggestedFix": fix or "",
+        "suggestedRewording": suggested_rewording or fix or "",
+        "meaningCheck": meaning_check(payload.get("originalText", claim_text), fix or "", payload.get("intent")),
     }
 
 
