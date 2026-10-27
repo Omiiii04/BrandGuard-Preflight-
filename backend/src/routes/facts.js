@@ -265,7 +265,7 @@ router.post(
       const validation = validateBody(req.body, actorId?.toString());
 
       if (!validation.valid) {
-        return res.status(422).json({
+        return res.status(400).json({
           success : false,
           error   : validation.error,
           code    : validation.code,
@@ -346,5 +346,46 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /v1/facts
+ *
+ * Lists approved brand facts for the organisation with optional pagination.
+ */
+router.get('/', async (req, res, next) => {
+  try {
+    const orgId = req.org?._id || req.orgId;
+    const page  = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const skip  = (page - 1) * limit;
+
+    const filter = { orgId };
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+    if (req.query.category) {
+      filter.category = req.query.category;
+    }
+
+    const [facts, total] = await Promise.all([
+      Fact.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Fact.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: facts,
+      total,
+      page,
+      limit,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
 
 module.exports = router;

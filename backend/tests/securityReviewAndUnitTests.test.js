@@ -944,7 +944,7 @@ describe('Security Review & Core Unit Tests', () => {
       assert.equal(data.code, 'ROLE_INSUFFICIENT');
     });
 
-    it('Finding action endpoint (PATCH /v1/findings/:id) enforces Reviewer RBAC (rejects creator with 403)', async () => {
+    it('Finding action endpoint (PATCH /v1/findings/:id) enforces Reviewer/Manager RBAC (rejects creator escalation with 403)', async () => {
       const findingId = new mongoose.Types.ObjectId();
       memoryFindings.set(findingId.toString(), {
         _id: findingId,
@@ -953,14 +953,14 @@ describe('Security Review & Core Unit Tests', () => {
         status: 'open',
       });
 
-      // Creator attempts to accept finding
+      // Creator attempts to escalate finding (restricted to managers/reviewers)
       const res = await fetch(`${baseUrl}/v1/findings/${findingId}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${tokenA_Creator}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ status: 'accepted' }),
+        body: JSON.stringify({ status: 'escalated' }),
       });
 
       assert.equal(res.status, 403);

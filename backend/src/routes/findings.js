@@ -25,7 +25,7 @@ const mongoose = require('mongoose');
 const Finding  = require('../models/Finding');
 const { authenticate }              = require('../middleware/auth');
 const { orgIsolation }              = require('../middleware/orgIsolation');
-const { requireRole }               = require('../middleware/rbac');
+const { requireRole, hasRole }      = require('../middleware/rbac');
 const { logEvent, AUDIT_EVENTS }    = require('../services/auditLogger');
 const { createDraftVersionOnAcceptedFix } = require('../services/versionManager');
 
@@ -150,7 +150,7 @@ function validateBody(body) {
  */
 router.patch(
   '/:id',
-  requireRole('reviewer', 'brand_manager', 'admin'),
+  requireRole('creator', 'reviewer', 'brand_manager', 'manager', 'admin', 'owner'),
   async (req, res, next) => {
     try {
       const { id }  = req.params;
@@ -177,6 +177,18 @@ router.patch(
       }
 
       const { normalisedStatus }  = bodyValidation;
+
+      // Creators can accept / edit / dismiss. Only managers / reviewers can escalate.
+      if (normalisedStatus === 'escalated' && !hasRole(req.user?.role, ['reviewer', 'manager', 'brand_manager', 'admin', 'owner'])) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Insufficient privileges to escalate findings. Requires reviewer or manager role.',
+          code: 'ROLE_INSUFFICIENT',
+          requiredRoles: ['reviewer', 'manager'],
+          userRole: req.user?.role,
+        });
+      }
+
       const reason     = req.body.reason     ? String(req.body.reason).trim()     : null;
       const editedText = req.body.editedText ? String(req.body.editedText).trim() : null;
 

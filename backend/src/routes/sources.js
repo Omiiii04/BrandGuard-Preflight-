@@ -19,6 +19,8 @@ const { uploadScan } = require('../middleware/uploadScan');
 const { uploadObject, getPresignedUrl } = require('../utils/minio');
 const mlOrchestrator = require('../services/mlOrchestrator');
 
+const { requireRole } = require('../middleware/rbac');
+
 const router = express.Router();
 
 // Mount authentication and organisation isolation on all source routes
@@ -31,7 +33,7 @@ router.use(authenticate, orgIsolation);
  * type allow-list, 10MB size limit, and AV scanning.
  * Saves the Source metadata to MongoDB.
  */
-router.post('/', uploadScan, async (req, res, next) => {
+router.post('/', requireRole('creator', 'editor', 'manager', 'reviewer', 'admin', 'owner'), uploadScan, async (req, res, next) => {
   try {
     const orgId = req.org?._id || req.orgId;
 
@@ -270,6 +272,77 @@ router.get('/:id', async (req, res, next) => {
     }
 
     return res.status(200).json(source);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * PATCH /v1/sources/:id
+ *
+ * Updates source owner, expiryDate, or status.
+ * Requires manager/reviewer/admin role.
+ */
+router.patch('/:id', requireRole('manager', 'reviewer', 'admin', 'knowledge_owner'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.org?._id || req.orgId;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid source ID format: "${id}".`,
+        code: 'INVALID_ID',
+      });
+    }
+
+    const source = await Source.findOne({ _id: id, orgId });
+    if (!source) {
+      return res.status(404).json({
+        success: false,
+        error: 'Source not found.',
+        code: 'NOT_FOUND',
+      });
+    }
+
+    const { owner, expiryDate, status } = req.body || {};
+
+    if (owner !== undefined) {
+      if (owner && !mongoose.Types.ObjectId.isValid(owner)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid owner ObjectId format.',
+          code: 'INVALID_OWNER',
+        });
+      }
+      source.owner = owner || null;
+    }
+
+    if (expiryDate !== undefined) {
+      const parsedDate = new Date(expiryDate);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid expiryDate format.',
+          code: 'INVALID_DATE',
+        });
+      }
+      source.expiryDate = parsedDate;
+    }
+
+    if (status !== undefined) {
+      if (!Source.SOURCE_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid status "${status}". Allowed: ${Source.SOURCE_STATUSES.join(', ')}`,
+          code: 'INVALID_STATUS',
+        });
+      }
+      source.status = status;
+    }
+
+    await source.save();
+    return res.status(200).json(source.toObject());
   } catch (err) {
     return next(err);
   }

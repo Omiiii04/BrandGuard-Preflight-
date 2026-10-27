@@ -202,10 +202,12 @@ async function createDraftVersionOnAcceptedFix(params) {
       // If span is missing or invalid, replace matching text or append
       const originalSnippet = span && typeof span.start === 'number'
         ? previousContent.slice(span.start, span.end)
-        : '';
+        : (finding.draftSpan || '');
 
       if (originalSnippet && previousContent.includes(originalSnippet)) {
         updatedContent = previousContent.replace(originalSnippet, fixText);
+      } else if (finding.draftSpan && previousContent.includes(finding.draftSpan)) {
+        updatedContent = previousContent.replace(finding.draftSpan, fixText);
       } else {
         updatedContent = previousContent ? `${previousContent}\n${fixText}` : fixText;
       }

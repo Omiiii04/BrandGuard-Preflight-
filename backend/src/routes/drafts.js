@@ -218,7 +218,7 @@ function resolveDraftFormat(file, bodyFormat) {
  *   6. Persists Draft + initial DraftVersion (v1) in MongoDB.
  *   7. Writes immutable AuditLog event: 'draft_submitted'.
  */
-router.post('/', handleDraftUpload, async (req, res, next) => {
+router.post('/', requireRole('creator', 'editor', 'manager', 'admin', 'owner'), handleDraftUpload, async (req, res, next) => {
   try {
     const orgId = req.org?._id || req.orgId;
     if (!orgId) {
@@ -657,7 +657,14 @@ router.get('/:id/findings', async (req, res, next) => {
 router.post('/redaction-preview', async (req, res, next) => {
   try {
     const orgId = req.org?._id || req.orgId || req.user?.orgId;
-    const content = req.body?.content || req.body?.draftContent || req.draftContent || '';
+    const content = req.body?.content || req.body?.draftContent || req.draftContent;
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error: "content" is required and must be a non-empty string.',
+        code: 'MISSING_CONTENT',
+      });
+    }
 
     const watchlist = await loadOrgWatchlist(orgId, req.org);
     const result = redactContent(content, watchlist);
@@ -782,7 +789,7 @@ router.post('/:id/redaction-preview', getDraftRedactionPreview);
  *   - Draft not found: 404.
  *   - MongoDB errors: propagated to error handler middleware.
  */
-router.post('/:id/review', async (req, res, next) => {
+router.post('/:id/review', requireRole('creator', 'editor', 'manager', 'reviewer', 'admin', 'owner'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const orgId  = req.org?._id || req.orgId;
@@ -903,6 +910,7 @@ router.post('/:id/review', async (req, res, next) => {
           explanation    : claim.explanation    || null,
           evidence       : resolved.evidence,
           proofPassageId : resolved.proofPassageId,
+          draftSpan      : claim.draftSpan || claim.text || null,
           status         : 'open',
         };
       }));

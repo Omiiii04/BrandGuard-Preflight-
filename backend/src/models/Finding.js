@@ -103,6 +103,13 @@ const findingSchema = new mongoose.Schema(
       },
     },
 
+    /** Original text snippet from the draft corresponding to span */
+    draftSpan: {
+      type    : String,
+      default : null,
+      trim    : true,
+    },
+
     /**
      * Finding category:
      *   'violation' — a concrete breach (contradicted claim, outdated fact, etc.)

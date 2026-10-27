@@ -46,6 +46,9 @@ app.get('/', (_req, res) => {
 });
 
 // ── Feature routes ──────────────────────────────────────────────────────────
+const authRouter = require('./routes/auth');
+app.use('/v1/auth', authRouter);
+
 const sourcesRouter = require('./routes/sources');
 app.use('/v1/sources', sourcesRouter);
 
@@ -67,6 +70,9 @@ app.use('/v1/insights', insightsRouter);
 const orgsRouter = require('./routes/orgs');
 app.use('/v1/orgs', orgsRouter);
 
+const gateRouter = require('./routes/gate');
+app.use('/v1/gate', gateRouter);
+
 // ── Error handling middleware ────────────────────────────────────────────────
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 app.use(notFoundHandler);
@@ -78,6 +84,12 @@ async function start() {
   try {
     console.log('[server] Connecting to MongoDB…');
     await connectDB();
+
+    // Seed demo data on first startup if database is unpopulated (NFR-D-04)
+    if (process.env.NODE_ENV !== 'test') {
+      const { seedDemoDataIfEmpty } = require('./utils/seed');
+      await seedDemoDataIfEmpty();
+    }
 
     try {
       console.log('[server] Bootstrapping MinIO bucket…');
