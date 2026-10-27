@@ -1,0 +1,57 @@
+.vt-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.vt-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vt-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  flex-wrap: wrap;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.vt-btn:hover {
+  border-color: var(--color-accent-blue);
+}
+
+.vt-btn--active {
+  border-color: var(--color-accent-blue);
+  background: rgba(74, 144, 226, 0.07);
+}
+
+.vt-version {
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.vt-author {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+}
+
+.vt-time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.vt-arrow {
+  font-size: 18px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  user-select: none;
+}

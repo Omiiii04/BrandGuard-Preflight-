@@ -1,7 +1,8 @@
 import { useOrg } from '../../context/OrgContext';
+import AIUseNotice from './AIUseNotice';
 import './TopBar.css';
 
-export default function TopBar({ pageTitle }) {
+export default function TopBar({ pageTitle, aiAssisted = false }) {
   const { org } = useOrg();
 
   return (
@@ -11,6 +12,7 @@ export default function TopBar({ pageTitle }) {
       </div>
 
       <div className="topbar-right">
+        {aiAssisted && <AIUseNotice />}
         {org && (
           <span className="topbar-org" aria-label={`Organisation: ${org.name}`}>
             {org.name}
