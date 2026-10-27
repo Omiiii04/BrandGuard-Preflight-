@@ -7,7 +7,6 @@ import ApprovalControls from '../components/workflow/ApprovalControls';
 import VersionTimeline from '../components/workflow/VersionTimeline';
 import DiffView from '../components/workflow/DiffView';
 import { getComments, postComment, approveDraft, requestChanges, overrideFinding } from '../api/workflow';
-import { getVersions } from '../api/passport';
 import { useAuth } from '../context/AuthContext';
 import './WorkflowPage.css';
 
@@ -49,13 +48,6 @@ const MOCK_VERSIONS = [
   ]},
   { _id: 'v3', version: 3, status: 'approved', authorName: 'Priya Mehta', createdAt: new Date(Date.now() - 900000).toISOString(), diff: null },
 ];
-
-const STATUS_BADGE = {
-  draft:      'badge-status-draft',
-  'in-review': 'badge-status-inreview',
-  approved:   'badge-status-approved',
-  blocked:    'badge-status-blocked',
-};
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_FINDINGS === 'true';
 
@@ -183,6 +175,7 @@ export default function WorkflowPage() {
       <ApprovalControls
         role={user?.role}
         draftStatus={draftStatus}
+        draftId={draftId}
         onApprove={handleApprove}
         onRequestChanges={handleRequestChanges}
         onOverride={handleOverride}

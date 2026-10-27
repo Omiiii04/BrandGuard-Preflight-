@@ -1,0 +1,122 @@
+.rmc-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rmc-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.rmc-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rmc-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.rmc-category {
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.rmc-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rmc-count {
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.rmc-example-toggle {
+  background: none;
+  border: none;
+  color: var(--color-accent-blue);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.rmc-example-toggle:hover {
+  color: var(--color-accent-blue-hover);
+}
+
+.rmc-bar-track {
+  height: 8px;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid rgba(46, 51, 80, 0.4);
+}
+
+.rmc-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-accent-blue) 0%, #F5A623 100%);
+  border-radius: var(--radius-sm);
+  transition: width 0.4s ease-out;
+}
+
+.rmc-example-box {
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-primary);
+  border-left: 2px solid var(--color-accent-blue);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rmc-example-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-bold);
+}
+
+.rmc-example-quote {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.rmc-empty {
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.rmc-empty-text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  margin-bottom: var(--space-1);
+}
+
+.rmc-empty-sub {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body-sm);
+}
+
+.rmc-skeleton-line {
+  height: 24px;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-3);
+  opacity: 0.6;
+  animation: omcPulse 1.5s ease-in-out infinite;
+}

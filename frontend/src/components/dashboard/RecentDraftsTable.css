@@ -1,0 +1,229 @@
+.rdt-container {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5, 20px);
+  gap: var(--space-4);
+}
+
+.rdt-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.rdt-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.rdt-title {
+  font-size: var(--font-size-heading-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.rdt-count {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-muted);
+}
+
+.rdt-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.rdt-search {
+  min-width: 200px;
+  max-width: 280px;
+  padding: 6px 12px;
+  font-size: var(--font-size-body-sm);
+  height: 34px;
+}
+
+.rdt-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--color-bg-primary);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.rdt-filter-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rdt-filter-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.rdt-filter-btn--active {
+  background: var(--color-accent-blue);
+  color: #fff;
+}
+
+.rdt-table-wrapper {
+  overflow-x: auto;
+  margin-top: var(--space-2);
+}
+
+.rdt-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.rdt-table th {
+  padding: var(--space-3) var(--space-4);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.rdt-th-actions {
+  text-align: right;
+}
+
+.rdt-row {
+  border-bottom: 1px solid rgba(46, 51, 80, 0.5);
+  transition: background-color 0.15s ease;
+}
+
+.rdt-row:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.rdt-table td {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-body);
+  vertical-align: middle;
+}
+
+.rdt-cell-title {
+  max-width: 260px;
+}
+
+.rdt-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rdt-title-link {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.rdt-title-link:hover {
+  color: var(--color-accent-blue);
+  text-decoration: underline;
+}
+
+.rdt-format-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.rdt-cell-owner {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.rdt-cell-date {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body-sm);
+  white-space: nowrap;
+}
+
+.rdt-cell-actions {
+  text-align: right;
+}
+
+.rdt-action-links {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.rdt-btn-review {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.rdt-btn-workflow {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.rdt-btn-passport {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: rgba(45, 212, 163, 0.12);
+  color: var(--color-verdict-supported);
+  border: 1px solid rgba(45, 212, 163, 0.3);
+}
+
+.rdt-btn-passport:hover {
+  background: rgba(45, 212, 163, 0.22);
+}
+
+.rdt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  gap: var(--space-3);
+}
+
+.rdt-empty-icon {
+  font-size: 36px;
+}
+
+.rdt-empty-text {
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.rdt-empty-cta {
+  margin-top: var(--space-2);
+}
+
+.rdt-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+}
