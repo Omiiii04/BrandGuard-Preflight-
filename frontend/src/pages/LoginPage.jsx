@@ -136,6 +136,26 @@ export default function LoginPage() {
             )}
           </div>
 
+          <div className="login-quick-demo">
+            <span className="login-quick-label">Demo Quick Logins:</span>
+            <div className="login-quick-buttons">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => { setEmail('priya@stellara.com'); setPassword('password123'); }}
+              >
+                Priya (Creator)
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => { setEmail('marcus@stellara.com'); setPassword('password123'); }}
+              >
+                Marcus (Manager)
+              </button>
+            </div>
+          </div>
+
           <button
             type="submit"
             id="login-submit"

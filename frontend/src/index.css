@@ -7,7 +7,7 @@
 
   --color-text-primary:   #F1F3FA;
   --color-text-secondary: #9BA3C0;
-  --color-text-muted:     #5C6480;
+  --color-text-muted:     #8A93B2;
 
   --color-accent-blue:       #4A90E2;
   --color-accent-blue-hover: #6AAEF8;
@@ -140,8 +140,16 @@ code, pre, .mono {
   font-size: var(--font-size-mono);
 }
 
-:focus-visible {
-  outline: 2px solid var(--color-border-focus);
+:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent-blue);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -276,7 +284,11 @@ code, pre, .mono {
 
 .form-input:focus {
   border-color: var(--color-border-focus);
-  outline: none;
+}
+
+.form-input:focus-visible {
+  outline: 2px solid var(--color-accent-blue);
+  outline-offset: 2px;
 }
 
 .form-input::placeholder {

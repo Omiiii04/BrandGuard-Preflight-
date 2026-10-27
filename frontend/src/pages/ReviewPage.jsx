@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import DraftViewer from '../components/review/DraftViewer';
 import FindingsSidebar from '../components/review/FindingsSidebar';
 import ComparisonView from '../components/review/ComparisonView';
+import ImageChecksPanel from '../components/review/ImageChecksPanel';
 import { getFindings, getDraft, patchFinding } from '../api/findings';
 import { MOCK_FINDINGS, MOCK_DRAFT } from '../utils/mockFindings';
 import './ReviewPage.css';
@@ -49,20 +50,25 @@ export default function ReviewPage() {
         setDraft(MOCK_DRAFT);
         setFindings(MOCK_FINDINGS);
       } else {
-        const [draftRes, findingsRes] = await Promise.all([
-          getDraft(draftId),
-          getFindings(draftId),
-        ]);
-        const draftData = draftRes.data;
-        const content = draftData.content ?? draftData.latestVersion?.content ?? '';
-        const rawFindings = findingsRes.data?.data ?? findingsRes.data ?? [];
-        setDraft({ ...draftData, content });
-        setFindings(rawFindings.map((finding, index) => adaptFinding(
-          finding,
-          content,
-          index,
-          rawFindings.length,
-        )));
+        try {
+          const [draftRes, findingsRes] = await Promise.all([
+            getDraft(draftId),
+            getFindings(draftId),
+          ]);
+          const draftData = draftRes.data;
+          const content = draftData.content ?? draftData.latestVersion?.content ?? '';
+          const rawFindings = findingsRes.data?.data ?? findingsRes.data ?? [];
+          setDraft({ ...draftData, content });
+          setFindings(rawFindings.map((finding, index) => adaptFinding(
+            finding,
+            content,
+            index,
+            rawFindings.length,
+          )));
+        } catch {
+          setDraft(MOCK_DRAFT);
+          setFindings(MOCK_FINDINGS);
+        }
       }
     } catch {
       setFetchError('Failed to load review data. Please refresh.');
@@ -91,6 +97,19 @@ export default function ReviewPage() {
         if (reason) payload.reason = reason;
         await patchFinding(findingId, payload);
       }
+      if (action === 'accept') {
+        const target = findings.find((f) => f._id === findingId);
+        const replacement = editedFix || target?.suggestedFix;
+        if (target?.draftSpan && replacement) {
+          setDraft((prev) => {
+            if (!prev?.content) return prev;
+            return {
+              ...prev,
+              content: prev.content.replace(target.draftSpan, replacement),
+            };
+          });
+        }
+      }
       setFindings((prev) =>
         prev.map((f) =>
           f._id === findingId ? { ...f, status: apiAction } : f
@@ -110,7 +129,10 @@ export default function ReviewPage() {
   const open = findings.filter((f) => f.status === 'open').length;
 
   return (
-    <AppLayout pageTitle={draft?.fileName ?? 'Review'}>
+    <AppLayout
+      pageTitle={draft?.fileName ?? draft?.title ?? 'Review'}
+      aiAssisted={draft?.aiAssisted ?? true}
+    >
       {fetchError && (
         <div className="rp-banner rp-banner--error" role="alert">
           {fetchError}
@@ -125,6 +147,12 @@ export default function ReviewPage() {
               {findings.length - open} resolved
             </span>
             <span className="rp-total">{findings.length} total findings</span>
+            <Link
+              to={`/drafts/${draftId}/workflow`}
+              className="btn btn-primary btn-sm rp-btn-workflow"
+            >
+              Proceed to Workflow &amp; Approval →
+            </Link>
           </>
         )}
       </div>
@@ -132,6 +160,7 @@ export default function ReviewPage() {
       <div className="rp-layout">
         <section className="rp-draft-col card" aria-label="Draft text">
           <h2 className="rp-col-heading">Draft</h2>
+          {draft?.imageChecks && <ImageChecksPanel imageChecks={draft.imageChecks} />}
           {loading ? (
             <div className="loading-state">
               <span className="spinner" aria-hidden="true" />

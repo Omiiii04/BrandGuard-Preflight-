@@ -43,3 +43,9 @@
   font-size: var(--font-size-body-sm);
   color: var(--color-text-muted);
 }
+
+.ac-btn-passport {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
