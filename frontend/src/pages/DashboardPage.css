@@ -1,0 +1,116 @@
+.dp-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  position: relative;
+}
+
+.dp-action-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.dp-heading {
+  font-size: var(--font-size-heading-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.dp-lead {
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.dp-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dp-btn-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+/* Two-column layout */
+.dp-grid-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+}
+
+@media (min-width: 1024px) {
+  .dp-grid-layout {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+
+.dp-grid-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Toast alert */
+.dp-toast {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-medium);
+  box-shadow: var(--shadow-modal);
+  animation: dpToastIn 0.25s ease-out;
+}
+
+.dp-toast--success {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-verdict-supported);
+  color: var(--color-text-primary);
+}
+
+.dp-toast--error {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-verdict-contradicted);
+  color: var(--color-text-primary);
+}
+
+.dp-toast-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dp-toast-close:hover {
+  color: var(--color-text-primary);
+}
+
+@keyframes dpToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

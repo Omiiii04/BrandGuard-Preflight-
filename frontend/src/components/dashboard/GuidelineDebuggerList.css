@@ -1,0 +1,180 @@
+.gdl-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.gdl-controls {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.gdl-filter-tabs {
+  display: flex;
+  background: var(--color-bg-primary);
+  padding: 3px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  gap: 2px;
+}
+
+.gdl-tab {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gdl-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.gdl-tab--active {
+  background: var(--color-accent-blue);
+  color: #fff;
+}
+
+.gdl-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.gdl-card {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color 0.15s ease;
+}
+
+.gdl-card--high-override {
+  border-left: 3px solid var(--color-verdict-contradicted);
+}
+
+.gdl-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.gdl-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gdl-rule-id {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.gdl-rule-desc {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.gdl-metrics-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.gdl-meta-text {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.gdl-diagnosis-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(244, 91, 105, 0.08);
+  border: 1px solid rgba(244, 91, 105, 0.2);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-verdict-contradicted);
+}
+
+.gdl-diagnosis-icon {
+  font-size: 14px;
+}
+
+.gdl-rewording-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: rgba(255, 255, 255, 0.02);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--color-border);
+}
+
+.gdl-rewording-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.gdl-rewording-label {
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-accent-blue);
+}
+
+.gdl-rewording-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.gdl-btn-approved {
+  color: var(--color-verdict-supported) !important;
+  border-color: rgba(45, 212, 163, 0.4) !important;
+  cursor: default !important;
+}
+
+.gdl-empty {
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+
+.gdl-empty-text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  margin-bottom: var(--space-1);
+}
+
+.gdl-empty-sub {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body-sm);
+}
+
+.gdl-skeleton-card {
+  height: 110px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  opacity: 0.6;
+  animation: omcPulse 1.5s ease-in-out infinite;
+}

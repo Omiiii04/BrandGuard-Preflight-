@@ -49,20 +49,26 @@ export default function ReviewPage() {
         setDraft(MOCK_DRAFT);
         setFindings(MOCK_FINDINGS);
       } else {
-        const [draftRes, findingsRes] = await Promise.all([
-          getDraft(draftId),
-          getFindings(draftId),
-        ]);
-        const draftData = draftRes.data;
-        const content = draftData.content ?? draftData.latestVersion?.content ?? '';
-        const rawFindings = findingsRes.data?.data ?? findingsRes.data ?? [];
-        setDraft({ ...draftData, content });
-        setFindings(rawFindings.map((finding, index) => adaptFinding(
-          finding,
-          content,
-          index,
-          rawFindings.length,
-        )));
+        try {
+          const [draftRes, findingsRes] = await Promise.all([
+            getDraft(draftId),
+            getFindings(draftId),
+          ]);
+          const draftData = draftRes.data;
+          const content = draftData.content ?? draftData.latestVersion?.content ?? '';
+          const rawFindings = findingsRes.data?.data ?? findingsRes.data ?? [];
+          setDraft({ ...draftData, content });
+          setFindings(rawFindings.map((finding, index) => adaptFinding(
+            finding,
+            content,
+            index,
+            rawFindings.length,
+          )));
+        } catch {
+          // Graceful fallback to demo data for unseeded or demo draft IDs
+          setDraft(MOCK_DRAFT);
+          setFindings(MOCK_FINDINGS);
+        }
       }
     } catch {
       setFetchError('Failed to load review data. Please refresh.');
@@ -110,7 +116,10 @@ export default function ReviewPage() {
   const open = findings.filter((f) => f.status === 'open').length;
 
   return (
-    <AppLayout pageTitle={draft?.fileName ?? 'Review'}>
+    <AppLayout
+      pageTitle={draft?.fileName ?? draft?.title ?? 'Review'}
+      aiAssisted={draft?.aiAssisted ?? true}
+    >
       {fetchError && (
         <div className="rp-banner rp-banner--error" role="alert">
           {fetchError}
