@@ -1,0 +1,78 @@
+{
+  "orgId": "507f1f77bcf86cd799439010",
+  "sources": [
+    {
+      "sourceId": "507f1f77bcf86cd799439011",
+      "sourceType": "returns_policy",
+      "version": "4.0",
+      "status": "active",
+      "expiryDate": "2027-06-30",
+      "text": "Eligible items may be returned within 30 days of delivery. Return policy superiority has not been independently validated."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439012",
+      "sourceType": "returns_policy",
+      "version": "3.0",
+      "status": "superseded",
+      "expiryDate": "2026-01-01",
+      "text": "The superseded policy allowed returns within 14 days of delivery."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439013",
+      "sourceType": "brand_guidelines",
+      "version": "2.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "bannedTerms": ["guaranteed best", "number one"],
+      "text": "Use factual, substantiated language. Do not use unqualified superiority claims."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439014",
+      "sourceType": "fact_sheet",
+      "version": "1.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "text": "Stellara Brands provides customer support for eligible returns."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439015",
+      "sourceType": "past_content",
+      "version": "1.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "text": "Stellara keeps returns simple for existing customers."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439016",
+      "sourceType": "past_content",
+      "version": "1.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "text": "Customers can review return eligibility before shipping an item."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439017",
+      "sourceType": "past_content",
+      "version": "1.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "text": "Our support team helps customers understand delivery and return steps."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439018",
+      "sourceType": "past_content",
+      "version": "1.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "text": "Stellara publishes clear information about eligible products."
+    },
+    {
+      "sourceId": "507f1f77bcf86cd799439019",
+      "sourceType": "past_content",
+      "version": "1.0",
+      "status": "active",
+      "expiryDate": "2027-12-31",
+      "text": "Customers receive practical guidance after delivery."
+    }
+  ]
+}

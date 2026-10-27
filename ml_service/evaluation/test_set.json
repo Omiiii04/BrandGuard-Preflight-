@@ -1,0 +1,22 @@
+[
+  {
+    "content": "We offer best returns in India for customers.",
+    "expected": [{"ruleId": "rule.superlative.unqualified", "verdict": "Contradicted"}]
+  },
+  {
+    "content": "Eligible items may be returned within 14 days of delivery.",
+    "expected": [{"ruleId": "rule.date.return-window", "verdict": "Outdated"}]
+  },
+  {
+    "content": "Eligible items may be returned within 30 days of delivery.",
+    "expected": [{"ruleId": "rule.date.return-window", "verdict": "Supported"}]
+  },
+  {
+    "content": "Eligible items may be returned within 45 days of delivery.",
+    "expected": [{"ruleId": "rule.date.return-window", "verdict": "Not Found"}]
+  },
+  {
+    "content": "Save 20% today.",
+    "expected": [{"ruleId": "rule.quantitative.percentage", "verdict": "Not Found"}]
+  }
+]

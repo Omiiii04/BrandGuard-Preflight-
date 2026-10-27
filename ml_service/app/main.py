@@ -1,27 +1,26 @@
-"""
-main.py - BrandGuard Preflight ML Service
+"""BrandGuard's offline-capable FastAPI ML boundary."""
 
-Deterministic NLI engine for integration testing.
-For the Stellara Brands returns-policy scenario, /extract-claims returns real
-claim objects (Contradicted / Outdated / Supported) so the full pipeline
-  draft -> claim extracted -> passage retrieved -> NLI verdict -> finding saved
-can be validated end-to-end without any real ML model dependency.
-"""
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 import re
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from .pipeline.claims import (
+    extract_claims as extract_claims_pipeline,
+    meaning_check,
+    retrieve_passage,
+    suggested_fix,
+)
+from .pipeline.image_checks import analyze_image
+from .pipeline.judge import judge_claim
+
 
 app = FastAPI(
     title="BrandGuard Preflight ML Service",
-    description=(
-        "ML service: claim extraction, NLI fact-checking, "
-        "matching, rewriting, pre-mortem, entity analysis"
-    ),
+    description="Offline-capable claim extraction, judging, rewriting, and analysis.",
     version="1.0.0",
 )
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,12 +29,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Stellara Brands in-memory knowledge base (simulates retrieved passages)
-# ---------------------------------------------------------------------------
+
 STELLARA_PASSAGES: List[Dict[str, Any]] = [
     {
-        "passageId": "stellara-passage-001",
+        "passageId": "507f1f77bcf86cd799439011",
         "fileName": "Stellara_Returns_Policy_v4.pdf",
         "page": 3,
         "version": "4.0",
@@ -48,7 +45,7 @@ STELLARA_PASSAGES: List[Dict[str, Any]] = [
         ),
     },
     {
-        "passageId": "stellara-passage-002",
+        "passageId": "507f1f77bcf86cd799439012",
         "fileName": "Stellara_Returns_Policy_v4.pdf",
         "page": 5,
         "version": "4.0",
@@ -61,147 +58,44 @@ STELLARA_PASSAGES: List[Dict[str, Any]] = [
     },
 ]
 
-# ---------------------------------------------------------------------------
-# NLI engine - deterministic rules for the Stellara scenario
-# ---------------------------------------------------------------------------
+
+def _require_fields(payload: Dict[str, Any], *fields: str) -> None:
+    if not isinstance(payload, dict) or any(field not in payload for field in fields):
+        raise HTTPException(status_code=422, detail=f"Required fields: {', '.join(fields)}")
+
+
+def _retrieve_passage(claim_text: str, passages: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
+    return retrieve_passage(claim_text, passages or STELLARA_PASSAGES)
+
 
 def _nli_verdict(claim_text: str, passage_text: str) -> Dict[str, Any]:
-    """Minimal rule-based NLI covering the three Stellara claim types."""
-    claim_lower = claim_text.lower()
-
-    if any(kw in claim_lower for kw in ["best returns policy", "best return policy"]):
-        return {
-            "verdict": "Contradicted",
-            "confidence": 0.94,
-            "evidence": passage_text,
-            "explanation": (
-                "The uploaded source explicitly states that no comparison to competitor "
-                "policies has been validated and does not support a 'best' superlative claim."
-            ),
-        }
-
-    if "14-day" in claim_lower or "14 day" in claim_lower:
-        return {
-            "verdict": "Outdated",
-            "confidence": 0.89,
-            "evidence": passage_text,
-            "explanation": (
-                "The source document confirms the return window was extended to 30 days "
-                "in Q1 2026. The 14-day figure is superseded."
-            ),
-        }
-
-    if "free of charge" in claim_lower or "no hidden fees" in claim_lower:
-        return {
-            "verdict": "Supported",
-            "confidence": 0.97,
-            "evidence": passage_text,
-            "explanation": (
-                "Return processing at no cost to the customer is confirmed by the source."
-            ),
-        }
-
-    return {
-        "verdict": "Not Found",
-        "confidence": 0.60,
-        "evidence": "",
-        "explanation": "No matching passage found in uploaded sources.",
-    }
-
-
-def _retrieve_passage(claim_text: str) -> Optional[Dict[str, Any]]:
-    """Deterministic retrieval: pick the closest Stellara passage."""
-    claim_lower = claim_text.lower()
-    if "14-day" in claim_lower or "14 day" in claim_lower:
-        return STELLARA_PASSAGES[1]
-    return STELLARA_PASSAGES[0]
+    """Compatibility helper retained for callers of the original stub."""
+    passage = {"passageId": None, "text": passage_text, "expiryDate": "2099-12-31"}
+    return judge_claim(claim_text, passage)
 
 
 def _build_suggested_fix(span_text: str, verdict: str) -> str:
-    s = span_text.lower()
-    if verdict == "Supported":
-        return ""
-    if "best returns policy" in s or "best return policy" in s:
-        return "We offer a 30-day returns policy, giving customers peace of mind."
-    if "14-day return" in s or "14 day return" in s:
-        return "Our 30-day return window is designed to be fair and hassle-free."
-    return ""
+    return suggested_fix(span_text, verdict)
 
 
-def _build_meaning_check(
-    original: str,
-    suggested_fix: str,
-    intent: Dict[str, Any],
-) -> Dict[str, Any]:
-    must_say: List[str] = intent.get("mustSay", [])
-    original_lower = original.lower()
-    fix_lower = suggested_fix.lower() if suggested_fix else ""
-
-    kept: List[str] = []
-    changed: List[str] = []
-    dropped: List[str] = []
-
-    for phrase in must_say:
-        pl = phrase.lower()
-        if pl in original_lower and pl in fix_lower:
-            kept.append(phrase)
-        elif pl in original_lower and pl not in fix_lower:
-            dropped.append(phrase)
-
-    if "best" in original_lower and suggested_fix:
-        changed.append(f"'{original.strip()}' > '{suggested_fix.strip()}'")
-    if "14-day" in original_lower and suggested_fix:
-        changed.append("14-day > 30-day")
-
-    return {"kept": kept, "changed": changed, "dropped": dropped}
+def _build_meaning_check(original: str, fix: str, intent: Dict[str, Any]) -> Dict[str, List[str]]:
+    return meaning_check(original, fix, intent)
 
 
 def _detect_claims(content: str, intent: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Detects factual / compliance claims using pattern rules.
-    Returns claim objects conforming to the mlOrchestrator schema.
-    """
-    claims: List[Dict[str, Any]] = []
-
-    patterns = [
-        (r"best returns? policy[^.]*", "violation", "rule.superlative.unqualified"),
-        (r"14[-\s]day return[^.]*",    "violation", "rule.date.outdated"),
-        (r"free of charge[^.]*",       "violation", "rule.cost.claim"),
-    ]
-
-    for pattern, finding_type, rule_id in patterns:
-        match = re.search(pattern, content, re.IGNORECASE)
-        if not match:
-            continue
-
-        span_text = match.group(0).strip()
-        start = match.start()
-        end = match.end()
-
-        passage = _retrieve_passage(span_text)
-        passage_text = passage["text"] if passage else ""
-
-        nli = _nli_verdict(span_text, passage_text)
-        suggested_fix = _build_suggested_fix(span_text, nli["verdict"])
-        meaning_check = _build_meaning_check(span_text, suggested_fix, intent)
-
-        claim: Dict[str, Any] = {
-            "span":        {"start": start, "end": end},
-            "type":        finding_type,
-            "verdict":     nli["verdict"],
-            "confidence":  nli["confidence"],
-            "ruleId":      rule_id,
-            "suggestedFix": suggested_fix,
-            "meaningCheck": meaning_check,
-        }
-        claims.append(claim)
-
-    return claims
+    return extract_claims_pipeline(content, STELLARA_PASSAGES, intent)
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
+def _public_passage(passage: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "passageId": str(passage.get("passageId", "")),
+        "text": str(passage.get("text", "")),
+        "sourceId": str(passage.get("sourceId", passage.get("passageId", ""))),
+        "page": int(passage.get("page", 0) or 0),
+        "score": float(passage.get("score", 0.91) or 0.91),
+        "expiryDate": passage.get("expiryDate"),
+    }
+
 
 @app.get("/health")
 def health_check() -> Dict[str, Any]:
@@ -215,86 +109,120 @@ def root() -> Dict[str, Any]:
 
 @app.post("/extract-claims")
 def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Extracts compliance claims and runs NLI against the Stellara knowledge base.
-
-    Request:  { content: str, orgId: str, intent: { purpose, audience, mustSay[] } }
-    Response: { claims: Claim[] }
-    """
-    content: str = payload.get("content", "")
-    intent: Dict[str, Any] = payload.get("intent", {})
-    claims = _detect_claims(content, intent)
+    _require_fields(payload, "content")
+    if not isinstance(payload["content"], str):
+        raise HTTPException(status_code=422, detail="content must be a string")
+    content = str(payload.get("content", ""))
+    intent = payload.get("intent") if isinstance(payload.get("intent"), dict) else {}
+    passages = payload.get("passages") if isinstance(payload.get("passages"), list) else STELLARA_PASSAGES
+    guidelines = payload.get("guidelines") if isinstance(payload.get("guidelines"), dict) else {}
+    image_context = payload.get("imageContext") if isinstance(payload.get("imageContext"), dict) else None
+    claims = extract_claims_pipeline(
+        content,
+        passages,
+        intent,
+        str(payload.get("orgId")) if payload.get("orgId") else None,
+        guidelines.get("bannedTerms", []),
+        image_context,
+    )
     return {"claims": claims}
 
 
 @app.post("/match")
 def match_passages(payload: Dict[str, Any]) -> Dict[str, Any]:
-    claim_text: str = payload.get("claim", "")
-    passage = _retrieve_passage(claim_text)
+    passages = payload.get("passages") if isinstance(payload.get("passages"), list) else STELLARA_PASSAGES
+    source_claims = payload.get("claims")
+    if not isinstance(source_claims, list):
+        text = str(payload.get("claim", ""))
+        source_claims = [{"text": text, "span": {"start": 0, "end": len(text)}}] if text else []
     matches = []
-    if passage:
-        matches.append({
-            "passageId": passage["passageId"],
-            "score": 0.91,
-            "snippet": passage["text"][:200],
-        })
+    for claim in source_claims[: int(payload.get("topK", 3) or 3)]:
+        claim_text = claim.get("text", "") if isinstance(claim, dict) else str(claim)
+        passage = retrieve_passage(claim_text, passages, str(payload.get("orgId")) if payload.get("orgId") else None)
+        evidence = [_public_passage(passage)] if passage else []
+        judged = judge_claim(claim_text, passage)
+        matches.append({"claim": claim, "passages": evidence, "verdict": judged["verdict"], "confidence": judged["confidence"]})
     return {"matches": matches}
 
 
 @app.post("/rewrite")
 def rewrite_claim(payload: Dict[str, Any]) -> Dict[str, Any]:
-    claim_text: str = payload.get("claim", "")
-    verdict: str = payload.get("verdict", "Not Found")
-    return {"suggestedFix": _build_suggested_fix(claim_text, verdict)}
+    claim = payload.get("claim", {})
+    claim_text = claim.get("text", "") if isinstance(claim, dict) else str(claim)
+    verdict = claim.get("verdict", "Not Found") if isinstance(claim, dict) else str(payload.get("verdict", "Not Found"))
+    fix = suggested_fix(claim_text, verdict)
+    return {
+        "suggestedFix": fix,
+        "meaningCheck": meaning_check(payload.get("originalText", claim_text), fix, payload.get("intent")),
+    }
 
 
 @app.post("/premortem")
 def premortem_check(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "risks": [
-            {
-                "viewpoint": "Regulator",
-                "severity": "high",
-                "reason": (
-                    "Unverified superlative comparative claim may breach "
-                    "ASA/ASCI advertising standards."
-                ),
-            },
-            {
-                "viewpoint": "Journalist",
-                "severity": "medium",
-                "reason": "Unsupported 'best' superlative is headline-worthy.",
-            },
-            {
-                "viewpoint": "Competitor",
-                "severity": "medium",
-                "reason": "Could trigger a counter-claim or legal challenge.",
-            },
-            {
-                "viewpoint": "Screen-Reader",
-                "severity": "low",
-                "reason": (
-                    "Mark tag provides no accessible context for the highlighted claim."
-                ),
-            },
-        ]
+    _require_fields(payload, "content", "findings")
+    if not isinstance(payload["content"], str) or not isinstance(payload["findings"], list):
+        raise HTTPException(status_code=422, detail="content must be a string and findings must be an array")
+    content = str(payload.get("content", ""))
+    findings = payload.get("findings") if isinstance(payload.get("findings"), list) else []
+    risk_line = ""
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        span = finding.get("span")
+        if isinstance(span, dict) and 0 <= span.get("start", -1) <= span.get("end", -1) <= len(content):
+            candidate = content[span["start"] : span["end"]]
+            if candidate.strip():
+                risk_line = candidate
+                break
+        candidate = finding.get("draftSpan")
+        if isinstance(candidate, str) and candidate in content:
+            risk_line = candidate
+            break
+    if not risk_line:
+        candidate_claims = extract_claims_pipeline(content, STELLARA_PASSAGES, payload.get("intent"))
+        risk_line = next((claim["text"] for claim in candidate_claims if claim["verdict"] != "Supported"), "")
+    if not risk_line and content:
+        risk_line = re.split(r"[.!?\n]", content, maxsplit=1)[0].strip()
+
+    high = bool(re.search(r"\b(best|only|fastest|leading|number one|#1)\b", risk_line, re.I))
+    severity = "high" if high else "medium"
+    reasons = {
+        "regulatory": "An unsupported claim may breach advertising standards.",
+        "brand": "The line may conflict with approved brand evidence.",
+        "customer": "The line may create an expectation the source does not support.",
+        "competitor": "The line may invite a comparative challenge.",
     }
+    risks = [
+        {"viewpoint": viewpoint, "riskLine": risk_line, "severity": severity, "reason": reason}
+        for viewpoint, reason in reasons.items()
+    ]
+    return {"risks": risks, "highestRiskLine": risk_line}
 
 
 @app.post("/image-check")
 def image_check(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return {"results": [], "message": "No images provided."}
+    _require_fields(payload, "storageRef", "orgId")
+    results = analyze_image(payload)
+    return {"results": results, "message": "No image metadata provided." if not results else None}
 
 
 @app.post("/detect-entities")
 def detect_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
-    content: str = payload.get("content", "")
+    _require_fields(payload, "content", "orgId")
+    content = str(payload.get("content", ""))
+    watchlist = payload.get("watchlist") if isinstance(payload.get("watchlist"), list) else []
     entities = []
-    if "stellara" in content.lower():
-        entities.append({
-            "text": "Stellara Brands",
-            "label": "ORG",
-            "start": 0,
-            "end": 15,
-        })
-    return {"entities": entities}
+    for term in watchlist:
+        if not isinstance(term, str) or not term.strip():
+            continue
+        for match in re.finditer(re.escape(term), content, re.IGNORECASE):
+            entities.append(
+                {
+                    "text": match.group(0),
+                    "type": "embargoed",
+                    "isWatchlisted": True,
+                    "span": {"start": match.start(), "end": match.end()},
+                }
+            )
+    entities.sort(key=lambda entity: (entity["span"]["start"], entity["span"]["end"]))
+    return {"entities": entities, "watchlistHits": len(entities)}
