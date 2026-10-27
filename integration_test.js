@@ -59,6 +59,7 @@ const DIM    = (s) => `\x1b[2m${s}\x1b[0m`;
 
 let stepIndex = 0;
 const results = [];
+let integrationMongoose;
 
 function step(label) {
   stepIndex++;
@@ -120,7 +121,7 @@ async function getOrSeedToken() {
   if (process.env.JWT_TOKEN) return process.env.JWT_TOKEN;
 
   try {
-    const mongoose = require('./backend/node_modules/mongoose');
+    const mongoose = integrationMongoose = require('./backend/node_modules/mongoose');
     const jwt = require('./backend/node_modules/jsonwebtoken');
     const secret = process.env.JWT_SECRET || 'brandguard-super-secret-jwt-key-change-me-in-production';
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/brandguard';
@@ -373,6 +374,30 @@ async function run() {
       if (allOpen) pass('All findings status=open (awaiting reviewer action)');
       else fail('Some findings are not in open status');
 
+      const evidenceFinding = savedFindings.find((f) => f.proofPassageId && f.evidence);
+      if (!evidenceFinding) {
+        fail('No evidence-backed finding with a persisted proof reference was returned');
+      } else if (
+        evidenceFinding.proofPassageId === evidenceFinding.evidence.passageId
+        || evidenceFinding.proofPassageId !== evidenceFinding.evidence.sourceId
+        || !evidenceFinding.evidence.passage
+        || evidenceFinding.evidence.fileName !== 'Stellara_Returns_Policy_v4.pdf'
+        || !evidenceFinding.explanation
+      ) {
+        fail('Persisted proof reference, source metadata, passage, or explanation is invalid', JSON.stringify(evidenceFinding));
+      } else {
+        pass(`Evidence resolved to org source ${evidenceFinding.proofPassageId}`);
+        pass(`Evidence snapshot persisted: ${evidenceFinding.evidence.fileName}, page ${evidenceFinding.evidence.page}, v${evidenceFinding.evidence.version}`);
+        pass('Finding explanation persisted for frontend display');
+      }
+
+      const unsupported = savedFindings.find((f) => f.verdict === 'Not Found');
+      if (unsupported && (unsupported.proofPassageId || unsupported.evidence)) {
+        fail('Unsupported finding received fabricated proof or evidence');
+      } else if (unsupported) {
+        pass('Unsupported finding has no fabricated proof or evidence');
+      }
+
     } else {
       fail(`GET findings returned HTTP ${status}`, JSON.stringify(data));
     }
@@ -475,5 +500,9 @@ function printSummary(mlOnly = false) {
 run().catch((err) => {
   console.error(RED('\n[FATAL] Integration test runner threw unhandled error:'));
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
+}).finally(async () => {
+  if (integrationMongoose?.connection.readyState) {
+    await integrationMongoose.connection.close();
+  }
 });

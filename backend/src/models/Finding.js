@@ -46,6 +46,7 @@ const meaningCheckSchema = new mongoose.Schema(
 const evidenceSchema = new mongoose.Schema(
   {
     passageId: { type: String, trim: true },
+    sourceId: { type: String, trim: true },
     fileName: { type: String, trim: true },
     page: Number,
     version: { type: String, trim: true },
