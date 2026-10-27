@@ -175,6 +175,7 @@ export default function WorkflowPage() {
       <ApprovalControls
         role={user?.role}
         draftStatus={draftStatus}
+        draftId={draftId}
         onApprove={handleApprove}
         onRequestChanges={handleRequestChanges}
         onOverride={handleOverride}

@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import OverrideReasonModal from './OverrideReasonModal';
 import './ApprovalControls.css';
 
-export default function ApprovalControls({ role, draftStatus, onApprove, onRequestChanges, onOverride }) {
+export default function ApprovalControls({ role, draftStatus, draftId, onApprove, onRequestChanges, onOverride }) {
   const [showOverride, setShowOverride] = useState(false);
 
   const isManager = role === 'manager' || role === 'admin';
@@ -18,7 +19,14 @@ export default function ApprovalControls({ role, draftStatus, onApprove, onReque
           ) : (
             <span className="badge badge-status-inreview">Awaiting approval</span>
           )}
-          <span className="ac-creator-note">You cannot approve your own draft.</span>
+          <span className="ac-creator-note">
+            {isApproved ? 'All compliance checks approved.' : 'You cannot approve your own draft.'}
+          </span>
+          {isApproved && (
+            <Link to={`/passports/${draftId}`} className="btn btn-primary btn-sm ac-btn-passport">
+              View Brand Passport →
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -62,6 +70,11 @@ export default function ApprovalControls({ role, draftStatus, onApprove, onReque
           >
             Override Finding
           </button>
+          {isApproved && (
+            <Link to={`/passports/${draftId}`} className="btn btn-primary btn-sm ac-btn-passport">
+              View Brand Passport →
+            </Link>
+          )}
         </div>
       </div>
 

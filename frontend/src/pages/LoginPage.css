@@ -76,6 +76,36 @@ form {
   gap: var(--space-1);
 }
 
+.login-quick-demo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.login-quick-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.login-quick-buttons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.login-quick-buttons .btn {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+  justify-content: center;
+}
+
 .login-submit {
   width: 100%;
   justify-content: center;

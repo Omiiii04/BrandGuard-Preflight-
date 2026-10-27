@@ -24,6 +24,14 @@
   color: var(--color-text-muted);
 }
 
+.rp-btn-workflow {
+  margin-left: auto;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .rp-layout {
   display: grid;
   grid-template-columns: 35fr 45fr 20fr;

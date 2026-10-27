@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import DraftViewer from '../components/review/DraftViewer';
 import FindingsSidebar from '../components/review/FindingsSidebar';
@@ -97,6 +97,19 @@ export default function ReviewPage() {
         if (reason) payload.reason = reason;
         await patchFinding(findingId, payload);
       }
+      if (action === 'accept') {
+        const target = findings.find((f) => f._id === findingId);
+        const replacement = editedFix || target?.suggestedFix;
+        if (target?.draftSpan && replacement) {
+          setDraft((prev) => {
+            if (!prev?.content) return prev;
+            return {
+              ...prev,
+              content: prev.content.replace(target.draftSpan, replacement),
+            };
+          });
+        }
+      }
       setFindings((prev) =>
         prev.map((f) =>
           f._id === findingId ? { ...f, status: apiAction } : f
@@ -134,6 +147,12 @@ export default function ReviewPage() {
               {findings.length - open} resolved
             </span>
             <span className="rp-total">{findings.length} total findings</span>
+            <Link
+              to={`/drafts/${draftId}/workflow`}
+              className="btn btn-primary btn-sm rp-btn-workflow"
+            >
+              Proceed to Workflow &amp; Approval →
+            </Link>
           </>
         )}
       </div>
