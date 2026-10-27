@@ -351,9 +351,27 @@ router.patch('/:id', requireRole('manager', 'reviewer', 'admin', 'knowledge_owne
       source.status = status;
     }
 
-    // Keep the durable ML index lifecycle metadata aligned with MongoDB. If
-    // the ML service is unavailable, fail the update rather than silently
-    // leaving stale passages eligible for evidence retrieval.
+    // Fail closed around the MongoDB/index boundary: first mark indexed
+    // passages as processing (ineligible for retrieval), then persist MongoDB,
+    // then apply the final lifecycle metadata. If a later step fails, passages
+    // remain excluded instead of being temporarily reactivated as stale evidence.
+    try {
+      await mlOrchestrator.updateSourceMetadata({
+        sourceId: source._id,
+        orgId,
+        status: 'processing',
+      });
+    } catch (syncErr) {
+      console.error('[sources] ML lifecycle quarantine error:', syncErr);
+      return res.status(502).json({
+        success: false,
+        error: 'Could not quarantine source passages before updating lifecycle metadata.',
+        code: 'SOURCE_METADATA_SYNC_FAILED',
+      });
+    }
+
+    await source.save();
+
     try {
       await mlOrchestrator.updateSourceMetadata({
         sourceId: source._id,
@@ -364,15 +382,14 @@ router.patch('/:id', requireRole('manager', 'reviewer', 'admin', 'knowledge_owne
         version: source.version,
       });
     } catch (syncErr) {
-      console.error('[sources] ML metadata sync error:', syncErr);
+      console.error('[sources] ML metadata sync error; passages remain quarantined:', syncErr);
       return res.status(502).json({
         success: false,
-        error: 'Could not synchronize source lifecycle metadata with the ML index.',
+        error: 'Source was saved, but the ML index remains quarantined until metadata synchronization succeeds.',
         code: 'SOURCE_METADATA_SYNC_FAILED',
       });
     }
 
-    await source.save();
     return res.status(200).json(source.toObject());
   } catch (err) {
     return next(err);
