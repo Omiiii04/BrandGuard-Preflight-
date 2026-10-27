@@ -4,7 +4,10 @@ import AppLayout from '../components/layout/AppLayout';
 import CommentThread from '../components/workflow/CommentThread';
 import CommentInput from '../components/workflow/CommentInput';
 import ApprovalControls from '../components/workflow/ApprovalControls';
+import VersionTimeline from '../components/workflow/VersionTimeline';
+import DiffView from '../components/workflow/DiffView';
 import { getComments, postComment, approveDraft, requestChanges, overrideFinding } from '../api/workflow';
+import { getVersions } from '../api/passport';
 import { useAuth } from '../context/AuthContext';
 import './WorkflowPage.css';
 
@@ -147,53 +150,20 @@ export default function WorkflowPage() {
         <div className="wp-main">
           <section className="wp-timeline-section">
             <h2 className="wp-section-heading">Version Timeline</h2>
-            <div className="wp-timeline" role="list" aria-label="Version history">
-              {versions.map((v, i) => (
-                <div key={v._id} className="wp-timeline-item" role="listitem">
-                  <button
-                    type="button"
-                    className={`wp-version-btn${selectedVersion?._id === v._id ? ' wp-version-btn--active' : ''}`}
-                    onClick={() => setSelectedVersion(selectedVersion?._id === v._id ? null : v)}
-                    aria-pressed={selectedVersion?._id === v._id}
-                  >
-                    <span className="wp-version-label">v{v.version}</span>
-                    <span className={`badge ${STATUS_BADGE[v.status] ?? 'badge-status-draft'}`}>
-                      {v.status}
-                    </span>
-                    <span className="wp-version-author">{v.authorName}</span>
-                    <time className="wp-version-time" dateTime={v.createdAt}>
-                      {new Date(v.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </time>
-                  </button>
-                  {i < versions.length - 1 && (
-                    <div className="wp-timeline-arrow" aria-hidden="true">›</div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <VersionTimeline
+              versions={versions}
+              selectedId={selectedVersion?._id}
+              onSelect={setSelectedVersion}
+            />
           </section>
 
-          {selectedVersion?.diff && (
+          {selectedVersion && (
             <section className="wp-diff-section card">
-              <h2 className="wp-section-heading">
-                Diff — v{selectedVersion.version}
-              </h2>
-              <div className="wp-diff" role="region" aria-label="Line-by-line diff">
-                {selectedVersion.diff.map((line, i) => (
-                  <div
-                    key={i}
-                    className={`wp-diff-line wp-diff-line--${line.type}`}
-                  >
-                    <span className="wp-diff-marker" aria-hidden="true">
-                      {line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' '}
-                    </span>
-                    <span className="wp-diff-text">{line.text}</span>
-                  </div>
-                ))}
-              </div>
+              <DiffView version={selectedVersion} />
             </section>
           )}
         </div>
+
 
         <aside className="wp-comments-col card" aria-label="Comment thread">
           <h2 className="wp-section-heading">Comments</h2>
