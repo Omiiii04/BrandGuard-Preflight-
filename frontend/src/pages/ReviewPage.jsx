@@ -4,6 +4,7 @@ import AppLayout from '../components/layout/AppLayout';
 import DraftViewer from '../components/review/DraftViewer';
 import FindingsSidebar from '../components/review/FindingsSidebar';
 import ComparisonView from '../components/review/ComparisonView';
+import ImageChecksPanel from '../components/review/ImageChecksPanel';
 import { getFindings, getDraft, patchFinding } from '../api/findings';
 import { MOCK_FINDINGS, MOCK_DRAFT } from '../utils/mockFindings';
 import './ReviewPage.css';
@@ -65,7 +66,6 @@ export default function ReviewPage() {
             rawFindings.length,
           )));
         } catch {
-          // Graceful fallback to demo data for unseeded or demo draft IDs
           setDraft(MOCK_DRAFT);
           setFindings(MOCK_FINDINGS);
         }
@@ -141,6 +141,7 @@ export default function ReviewPage() {
       <div className="rp-layout">
         <section className="rp-draft-col card" aria-label="Draft text">
           <h2 className="rp-col-heading">Draft</h2>
+          {draft?.imageChecks && <ImageChecksPanel imageChecks={draft.imageChecks} />}
           {loading ? (
             <div className="loading-state">
               <span className="spinner" aria-hidden="true" />

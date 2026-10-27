@@ -42,7 +42,6 @@
   text-decoration: none;
 }
 
-/* Two-column layout */
 .dp-grid-layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -61,7 +60,6 @@
   gap: var(--space-6);
 }
 
-/* Toast alert */
 .dp-toast {
   position: fixed;
   bottom: var(--space-6);

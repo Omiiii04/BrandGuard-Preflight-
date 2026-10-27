@@ -8,7 +8,6 @@ import { getDrafts } from '../api/drafts';
 import { getRuleInsights, getMistakeInsights, getTimeToApproval } from '../api/insights';
 import './DashboardPage.css';
 
-// Synthetic fallback data matching the Stellara Brands hackathon scenario
 const SAMPLE_DRAFTS = [
   {
     _id: 'draft-stellara-01',
@@ -121,21 +120,17 @@ export default function DashboardPage() {
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch Drafts
       let fetchedDrafts = [];
       try {
         const draftsRes = await getDrafts({ limit: 50 });
         fetchedDrafts = draftsRes.data?.data ?? draftsRes.data?.drafts ?? draftsRes.data ?? [];
-      } catch {
-        // Fallback to sample drafts if draft API is unavailable
-      }
+      } catch {}
 
       if (!fetchedDrafts || fetchedDrafts.length === 0) {
         fetchedDrafts = SAMPLE_DRAFTS;
       }
       setDrafts(fetchedDrafts);
 
-      // 2. Fetch Insights (if user has manager/admin role or backend permits)
       let fetchedMistakes = [];
       let fetchedRules = [];
       let fetchedTta = null;
@@ -166,9 +161,7 @@ export default function DashboardPage() {
         if (ttaRes.status === 'fulfilled') {
           fetchedTta = ttaRes.value.data?.data ?? ttaRes.value.data ?? null;
         }
-      } catch {
-        // Fallback to sample insights
-      }
+      } catch {}
 
       setMistakes(fetchedMistakes.length > 0 ? fetchedMistakes : SAMPLE_MISTAKES);
       setRules(fetchedRules.length > 0 ? fetchedRules : SAMPLE_RULES);
@@ -182,7 +175,6 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // Derived Metrics calculation
   const totalDrafts = drafts.length;
   const inReviewCount = drafts.filter(
     (d) => (d.status || '').toLowerCase().replace('_', '-') === 'in-review'
@@ -197,7 +189,7 @@ export default function DashboardPage() {
     totalDrafts,
     inReviewCount,
     avgTimeToApprove: avgHoursFormatted,
-    openFindings: inReviewCount * 3, // Realistic estimated finding load
+    openFindings: inReviewCount * 3,
     citationRate: '94.6%',
   };
 
@@ -222,7 +214,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Dashboard Action Header */}
         <div className="dp-action-header">
           <div>
             <h2 className="dp-heading">Brand Compliance Overview</h2>
@@ -243,10 +234,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* KPI Org Metrics */}
         <OrgMetricsCard metrics={metrics} loading={loading} />
 
-        {/* Main Content Layout: Left Table + Right Insights */}
         <div className="dp-grid-layout">
           <div className="dp-grid-col dp-grid-col--main">
             <RecentDraftsTable drafts={drafts} loading={loading} />
