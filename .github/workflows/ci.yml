@@ -24,7 +24,7 @@ jobs:
         run: python -m pip install -r ml_service/requirements.txt pytest httpx
       - name: Run ML service tests
         working-directory: ml_service
-        run: pytest -q
+        run: PYTHONPATH=. pytest -q
 
   backend:
     name: Backend tests
