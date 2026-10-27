@@ -117,6 +117,7 @@ def extract_claims(
 
     claims = []
     for start, end, span_text, rule_id in sorted(unique.values(), key=lambda item: (item[0], item[1])):
+        passage = None
         if rule_id == "rule.banned-term" or rule_id == "rule.accessibility.alt-text":
             judged = {
                 "verdict": "Contradicted",
@@ -138,6 +139,17 @@ def extract_claims(
             else:
                 judged = judge_claim(span_text, passage)
         fix = suggested_fix(span_text, judged["verdict"])
+        evidence = None
+        if passage and judged["proofPassageId"]:
+            evidence = {
+                "passageId": str(passage.get("passageId", "")),
+                "fileName": passage.get("fileName", ""),
+                "page": passage.get("page"),
+                "version": passage.get("version", ""),
+                "expiryDate": passage.get("expiryDate"),
+                "ownerName": passage.get("ownerName", ""),
+                "passage": passage.get("text", ""),
+            }
         claims.append(
             {
                 "text": span_text,
@@ -150,6 +162,7 @@ def extract_claims(
                 "suggestedFix": fix,
                 "meaningCheck": meaning_check(span_text, fix, intent),
                 "explanation": judged["explanation"],
+                "evidence": evidence,
             }
         )
     return claims

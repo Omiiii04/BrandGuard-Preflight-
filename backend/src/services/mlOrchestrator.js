@@ -177,7 +177,7 @@ function postJson(targetUrl, payload, timeoutMs) {
  * @param {number}  index - Position in the claims array (for error messages)
  * @returns {{ valid: boolean, error?: string }}
  */
-function validateClaim(claim, index) {
+function validateClaim(claim, index, contentLength = null) {
   const prefix = `claims[${index}]`;
 
   if (!claim || typeof claim !== 'object') {
@@ -193,6 +193,12 @@ function validateClaim(claim, index) {
   }
   if (claim.span.start < 0 || claim.span.end < claim.span.start) {
     return { valid: false, error: `${prefix}.span: start must be >= 0 and end >= start` };
+  }
+  if (contentLength !== null && claim.span.end > contentLength) {
+    return {
+      valid: false,
+      error: `${prefix}.span: end must not exceed submitted content length ${contentLength}`,
+    };
   }
 
   // ── type ───────────────────────────────────────────────────────────────────
@@ -253,7 +259,7 @@ function validateClaim(claim, index) {
  * @param {unknown} body
  * @returns {{ valid: boolean, error?: string }}
  */
-function validateExtractClaimsResponse(body) {
+function validateExtractClaimsResponse(body, contentLength = null) {
   if (!body || typeof body !== 'object') {
     return { valid: false, error: 'Response body must be a JSON object' };
   }
@@ -263,7 +269,7 @@ function validateExtractClaimsResponse(body) {
   }
 
   for (let i = 0; i < body.claims.length; i++) {
-    const result = validateClaim(body.claims[i], i);
+    const result = validateClaim(body.claims[i], i, contentLength);
     if (!result.valid) return result;
   }
 
@@ -721,7 +727,7 @@ async function extractClaims({
   }
 
   // ── 3. Schema validation ───────────────────────────────────────────────────
-  const validation = validateExtractClaimsResponse(rawResponse);
+  const validation = validateExtractClaimsResponse(rawResponse, payload.content.length);
 
   if (!validation.valid) {
     const schemaErr = Object.assign(

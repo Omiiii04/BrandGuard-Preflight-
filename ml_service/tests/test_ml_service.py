@@ -125,6 +125,9 @@ def test_stellara_demo_returns_three_distinct_claims_with_offsets_and_evidence()
     assert [item["verdict"] for item in claims] == ["Contradicted", "Outdated", "Not Found"]
     assert all(item["proofPassageId"] for item in claims[:2])
     assert claims[2]["proofPassageId"] is None
+    assert claims[0]["evidence"]["passage"]
+    assert claims[0]["evidence"]["fileName"] == "Stellara_Returns_Policy_v4.pdf"
+    assert claims[2]["evidence"] is None
 
 
 def test_retrieval_filters_passages_by_organization():

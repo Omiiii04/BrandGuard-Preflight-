@@ -8,7 +8,21 @@ import { getFindings, getDraft, patchFinding } from '../api/findings';
 import { MOCK_FINDINGS, MOCK_DRAFT } from '../utils/mockFindings';
 import './ReviewPage.css';
 
-const USE_MOCK = true;
+const USE_MOCK = import.meta.env.VITE_REVIEW_USE_MOCK === 'true';
+
+function adaptFinding(finding, content, index, total) {
+  const start = finding.span?.start ?? 0;
+  const end = finding.span?.end ?? start;
+  return {
+    ...finding,
+    index: index + 1,
+    total,
+    draftSpan: content.slice(start, end),
+    draftContext: content.slice(Math.max(0, start - 80), Math.min(content.length, end + 80)),
+    proof: finding.evidence ?? null,
+    reason: finding.explanation ?? '',
+  };
+}
 
 export default function ReviewPage() {
   const { draftId } = useParams();
@@ -39,8 +53,16 @@ export default function ReviewPage() {
           getDraft(draftId),
           getFindings(draftId),
         ]);
-        setDraft(draftRes.data);
-        setFindings(findingsRes.data);
+        const draftData = draftRes.data;
+        const content = draftData.content ?? draftData.latestVersion?.content ?? '';
+        const rawFindings = findingsRes.data?.data ?? findingsRes.data ?? [];
+        setDraft({ ...draftData, content });
+        setFindings(rawFindings.map((finding, index) => adaptFinding(
+          finding,
+          content,
+          index,
+          rawFindings.length,
+        )));
       }
     } catch {
       setFetchError('Failed to load review data. Please refresh.');
@@ -53,15 +75,28 @@ export default function ReviewPage() {
 
   async function handleAction({ findingId, action, editedFix }) {
     try {
+      const apiAction = {
+        accept: 'accepted',
+        edit: 'edited',
+        dismiss: 'dismissed',
+        'ask-owner': 'escalated',
+      }[action] ?? action;
+      const reason = action === 'dismiss'
+        ? window.prompt('Why should this finding be dismissed?')?.trim()
+        : undefined;
+      if (action === 'dismiss' && !reason) return;
       if (!USE_MOCK) {
-        await patchFinding(findingId, { action, editedFix });
+        const payload = { status: apiAction };
+        if (apiAction === 'edited') payload.editedText = editedFix;
+        if (reason) payload.reason = reason;
+        await patchFinding(findingId, payload);
       }
       setFindings((prev) =>
         prev.map((f) =>
-          f._id === findingId ? { ...f, status: action } : f
+          f._id === findingId ? { ...f, status: apiAction } : f
         )
       );
-      showToast(`Finding ${action === 'accept' ? 'accepted' : action === 'dismiss' ? 'dismissed' : 'updated'}.`, 'success');
+      showToast(`Finding ${apiAction === 'accepted' ? 'accepted' : apiAction === 'dismissed' ? 'dismissed' : 'updated'}.`, 'success');
     } catch {
       showToast('Action failed. Please try again.', 'error');
     }

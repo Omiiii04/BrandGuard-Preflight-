@@ -43,6 +43,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
       - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml:8000}
+      - DEMO_MODE=${DEMO_MODE:-true}
       - JWT_SECRET=${JWT_SECRET:-brandguard-super-secret-jwt-key-2026}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
     depends_on:

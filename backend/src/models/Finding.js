@@ -43,6 +43,19 @@ const meaningCheckSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const evidenceSchema = new mongoose.Schema(
+  {
+    passageId: { type: String, trim: true },
+    fileName: { type: String, trim: true },
+    page: Number,
+    version: { type: String, trim: true },
+    expiryDate: Date,
+    ownerName: { type: String, trim: true },
+    passage: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
 // ── Main schema ───────────────────────────────────────────────────────────────
 
 const findingSchema = new mongoose.Schema(
@@ -150,6 +163,17 @@ const findingSchema = new mongoose.Schema(
      */
     meaningCheck: {
       type    : meaningCheckSchema,
+      default : null,
+    },
+
+    /** Explanation and evidence snapshot returned by the deterministic ML pipeline. */
+    explanation: {
+      type    : String,
+      default : null,
+      trim    : true,
+    },
+    evidence: {
+      type    : evidenceSchema,
       default : null,
     },
 

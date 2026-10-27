@@ -30,6 +30,7 @@ const { logEvent, logEventSafe, AUDIT_EVENTS } = require('../services/auditLogge
 const { uploadObject, getPresignedUrl } = require('../utils/minio');
 const { extractClaims } = require('../services/mlOrchestrator');
 const { buildPassport } = require('../services/passportBuilder');
+const { resolveFindingEvidence } = require('../services/findingEvidence');
 
 const router = express.Router();
 
@@ -719,22 +720,27 @@ router.post('/:id/review', async (req, res, next) => {
     let savedFindings = [];
 
     if (claims.length > 0) {
-      const findingDocs = claims.map((claim) => ({
-        orgId          : orgId,
-        draftId        : draft._id,
-        draftVersionId : draftVersion._id,
-        span           : {
-          start : claim.span.start,
-          end   : claim.span.end,
-        },
-        type           : claim.type,
-        verdict        : claim.verdict,
-        confidence     : claim.confidence,
-        suggestedFix   : claim.suggestedFix   || null,
-        ruleId         : claim.ruleId         || null,
-        meaningCheck   : claim.meaningCheck   || null,
-        proofPassageId : claim.proofPassageId || null,
-        status         : 'open',
+      const findingDocs = await Promise.all(claims.map(async (claim) => {
+        const resolved = await resolveFindingEvidence({ claim, orgId });
+        return {
+          orgId          : orgId,
+          draftId        : draft._id,
+          draftVersionId : draftVersion._id,
+          span           : {
+            start : claim.span.start,
+            end   : claim.span.end,
+          },
+          type           : resolved.proofPassageId ? claim.type : 'question',
+          verdict        : claim.verdict,
+          confidence     : claim.confidence,
+          suggestedFix   : claim.suggestedFix   || null,
+          ruleId         : claim.ruleId         || null,
+          meaningCheck   : claim.meaningCheck   || null,
+          explanation    : claim.explanation    || null,
+          evidence       : resolved.evidence,
+          proofPassageId : resolved.proofPassageId,
+          status         : 'open',
+        };
       }));
 
       savedFindings = await Finding.insertMany(findingDocs, { ordered: false });

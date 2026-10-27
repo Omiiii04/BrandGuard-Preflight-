@@ -357,6 +357,29 @@ components:
           example: "Free returns within 30 days."
         meaningCheck:
           $ref: "#/components/schemas/MeaningCheck"
+        explanation:
+          type: string
+          description: Safe explanation returned by the ML judge.
+        evidence:
+          type: object
+          nullable: true
+          properties:
+            passageId:
+              type: string
+            sourceId:
+              $ref: "#/components/schemas/ObjectId"
+            fileName:
+              type: string
+            page:
+              type: integer
+            version:
+              type: string
+            expiryDate:
+              $ref: "#/components/schemas/ISODateTime"
+            ownerName:
+              type: string
+            passage:
+              type: string
         status:
           $ref: "#/components/schemas/FindingStatus"
         ruleId:
@@ -632,6 +655,41 @@ components:
             end:
               type: integer
               example: 31
+        verdict:
+          $ref: "#/components/schemas/Verdict"
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        proofPassageId:
+          $ref: "#/components/schemas/ObjectId"
+        suggestedFix:
+          type: string
+        meaningCheck:
+          $ref: "#/components/schemas/MeaningCheck"
+        ruleId:
+          type: string
+        explanation:
+          type: string
+        evidence:
+          type: object
+          nullable: true
+          properties:
+            passageId:
+              type: string
+            fileName:
+              type: string
+            page:
+              type: integer
+            version:
+              type: string
+            expiryDate:
+              $ref: "#/components/schemas/ISODateTime"
+            ownerName:
+              type: string
+            passage:
+              type: string
 
     ExtractClaimsRequest:
       type: object
