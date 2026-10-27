@@ -32,15 +32,24 @@ const { URL } = require('url');
 
 const API_URL = (process.env.API_URL || 'http://localhost:4000').replace(/\/$/, '');
 const ML_URL  = (process.env.ML_URL  || 'http://localhost:8000').replace(/\/$/, '');
+const INTEGRATION_MARKER = process.env.INTEGRATION_MARKER || `integration-run-${Date.now()}`;
 
 // Stellara Brands draft content (returns-policy scenario)
 const STELLARA_DRAFT_CONTENT = [
-  'Stellara Brands offers the best returns policy in the market,',
-  'giving customers total peace of mind.',
+  `Stellara Brands offers the best returns policy in the market ${INTEGRATION_MARKER}.`,
+  'This gives customers total peace of mind.',
   'Our 14-day return window is designed to be fair and hassle-free.',
   'Returns are processed free of charge with no hidden fees.',
   'Simply contact our support team within 14 days of delivery.',
 ].join(' ');
+
+const UPLOADED_POLICY_CONTENT = [
+  '# Stellara Returns Policy',
+  '',
+  'Customers may return eligible items within 30 days of the delivery date.',
+  'Returns are processed free of charge with no hidden fees.',
+  `The policy does not establish the best returns policy in the market ${INTEGRATION_MARKER}.`,
+].join('\n');
 
 const DRAFT_INTENT = {
   purpose:  'Promote Stellara Brands returns policy to existing customers',
@@ -114,6 +123,48 @@ function request(method, url, body, headers = {}) {
     req.on('error', reject);
     if (bodyStr) req.write(bodyStr);
     req.end();
+  });
+}
+
+function uploadSource(url, fileName, content, fields, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const boundary = `----BrandGuardIntegration${Date.now()}`;
+    const parts = [];
+    for (const [name, value] of Object.entries(fields)) {
+      parts.push(Buffer.from(`--${boundary}\r\n`));
+      parts.push(Buffer.from(`Content-Disposition: form-data; name="${name}"\r\n\r\n`));
+      parts.push(Buffer.from(`${value}\r\n`));
+    }
+    parts.push(Buffer.from(`--${boundary}\r\n`));
+    parts.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n`));
+    parts.push(Buffer.from('Content-Type: text/markdown\r\n\r\n'));
+    parts.push(Buffer.from(content));
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    const body = Buffer.concat(parts);
+    const parsed = new URL(url);
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const req = transport.request({
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + (parsed.search || ''),
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+        ...headers,
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        let data;
+        try { data = JSON.parse(raw); } catch { data = raw; }
+        resolve({ status: res.statusCode, data });
+      });
+    });
+    req.on('error', reject);
+    req.end(body);
   });
 }
 
@@ -222,6 +273,17 @@ async function run() {
       content : STELLARA_DRAFT_CONTENT,
       orgId   : 'integration-test-org',
       intent  : DRAFT_INTENT,
+      passages: [{
+        passageId: 'controlled-test-passage',
+        sourceId: 'controlled-test-source',
+        orgId: 'integration-test-org',
+        fileName: 'controlled-test-policy.md',
+        page: null,
+        version: '1.0',
+        expiryDate: '2099-12-31',
+        ownerName: 'Integration Test',
+        text: UPLOADED_POLICY_CONTENT,
+      }],
     });
 
     if (status !== 200) {
@@ -285,6 +347,35 @@ async function run() {
 
 
   const AUTH = { Authorization: `Bearer ${JWT_TOKEN}` };
+  step('Upload real source â€“ POST /v1/sources (synthetic Markdown policy)');
+
+  let sourceId;
+  try {
+    const { status, data } = await uploadSource(
+      `${API_URL}/v1/sources`,
+      'Stellara_Returns_Policy_v4.md',
+      UPLOADED_POLICY_CONTENT,
+      {
+        type: 'guideline',
+        ownerName: 'Compliance and Legal',
+        version: '4.0',
+        expiryDate: '2027-06-30',
+      },
+      AUTH,
+    );
+    if (status === 201 && data._id && data.status === 'ready') {
+      sourceId = data._id;
+      pass(`Real source uploaded and indexed: sourceId=${sourceId}`);
+      info(`  file=${data.fileName} version=${data.version} status=${data.status}`);
+    } else {
+      fail(`POST /v1/sources returned HTTP ${status} or was not ready`, JSON.stringify(data));
+      return printSummary();
+    }
+  } catch (e) {
+    fail('POST /v1/sources request failed', e.message);
+    return printSummary();
+  }
+
   let draftId;
 
   try {
@@ -381,7 +472,8 @@ async function run() {
         evidenceFinding.proofPassageId === evidenceFinding.evidence.passageId
         || evidenceFinding.proofPassageId !== evidenceFinding.evidence.sourceId
         || !evidenceFinding.evidence.passage
-        || evidenceFinding.evidence.fileName !== 'Stellara_Returns_Policy_v4.pdf'
+        || evidenceFinding.evidence.fileName !== 'Stellara_Returns_Policy_v4.md'
+        || evidenceFinding.evidence.sourceId !== sourceId
         || !evidenceFinding.explanation
       ) {
         fail('Persisted proof reference, source metadata, passage, or explanation is invalid', JSON.stringify(evidenceFinding));

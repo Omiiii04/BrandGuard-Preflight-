@@ -86,7 +86,7 @@ const ML_RESPONSE_TYPES = {
  * @param {number}  timeoutMs  - Request timeout in milliseconds
  * @returns {Promise<object>}  - Parsed JSON response body
  */
-function postJson(targetUrl, payload, timeoutMs) {
+function postJson(targetUrl, payload, timeoutMs, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(targetUrl);
     const bodyStr   = JSON.stringify(payload);
@@ -100,6 +100,7 @@ function postJson(targetUrl, payload, timeoutMs) {
         'Content-Type'   : 'application/json',
         'Content-Length' : Buffer.byteLength(bodyStr),
         'X-Internal'     : 'brandguard-backend',
+        ...extraHeaders,
       },
     };
 
@@ -471,6 +472,25 @@ function validateIndexResponse(body) {
   return { valid: true };
 }
 
+function validateSourceIndexResponse(body, expectedSourceId, expectedOrgId) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { valid: false, error: 'index-source response body must be a JSON object' };
+  }
+  if (body.indexed !== true || body.status !== 'indexed') {
+    return { valid: false, error: 'index-source response must confirm indexed status' };
+  }
+  if (String(body.sourceId) !== String(expectedSourceId)) {
+    return { valid: false, error: 'index-source response sourceId does not match request' };
+  }
+  if (String(body.orgId) !== String(expectedOrgId)) {
+    return { valid: false, error: 'index-source response orgId does not match request' };
+  }
+  if (!Number.isInteger(body.passageCount) || body.passageCount < 0) {
+    return { valid: false, error: 'index-source response passageCount must be a non-negative integer' };
+  }
+  return { valid: true };
+}
+
 /**
  * Validates a single match entry inside a /similarity response.
  *
@@ -637,6 +657,51 @@ async function discardIfInvalid({
 // Public API
 // ---------------------------------------------------------------------------
 
+async function indexSource({
+  sourceId,
+  orgId,
+  fileName,
+  mimeType,
+  version = '1.0',
+  expiryDate = null,
+  ownerName = '',
+  status = 'ready',
+  content,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}) {
+  const mlBaseUrl = (process.env.ML_SERVICE_URL || '').replace(/\/$/, '');
+  if (!mlBaseUrl) {
+    throw Object.assign(new Error('ML_SERVICE_URL environment variable is not configured.'), {
+      code: 'ML_URL_NOT_CONFIGURED',
+    });
+  }
+
+  const payload = {
+    sourceId: String(sourceId),
+    orgId: String(orgId),
+    fileName: String(fileName),
+    mimeType: mimeType || 'application/octet-stream',
+    version: String(version || '1.0'),
+    expiryDate: expiryDate || null,
+    ownerName: String(ownerName || ''),
+    status: String(status || 'ready'),
+    contentBase64: Buffer.from(content || '').toString('base64'),
+  };
+  const rawResponse = await postJson(
+    `${mlBaseUrl}/index-source`,
+    payload,
+    timeoutMs,
+    { 'X-ML-Internal-Token': process.env.ML_INTERNAL_TOKEN || '' }
+  );
+  const validation = validateSourceIndexResponse(rawResponse, sourceId, orgId);
+  if (!validation.valid) {
+    throw Object.assign(new Error(`ML source index response failed schema validation: ${validation.error}`), {
+      code: 'ML_SCHEMA_INVALID',
+    });
+  }
+  return rawResponse;
+}
+
 /**
  * Calls the ML service POST /extract-claims endpoint with redacted content.
  *
@@ -768,6 +833,7 @@ async function extractClaims({
 
 module.exports = {
   // Core orchestration
+  indexSource,
   extractClaims,
   DEFAULT_TIMEOUT_MS,
 
@@ -780,6 +846,7 @@ module.exports = {
   validateSummariseResponse,
   validateClassifyResponse,
   validateIndexResponse,
+  validateSourceIndexResponse,
   validateSimilarityResponse,
 
   // Sub-validators (exported for unit testing)

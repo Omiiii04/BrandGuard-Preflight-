@@ -17,6 +17,7 @@ const { authenticate } = require('../middleware/auth');
 const { orgIsolation } = require('../middleware/orgIsolation');
 const { uploadScan } = require('../middleware/uploadScan');
 const { uploadObject, getPresignedUrl } = require('../utils/minio');
+const mlOrchestrator = require('../services/mlOrchestrator');
 
 const router = express.Router();
 
@@ -113,6 +114,7 @@ router.post('/', uploadScan, async (req, res, next) => {
     }
 
     // Save Source document to MongoDB
+    const requestedStatus = Source.SOURCE_STATUSES.includes(status) ? status : 'ready';
     const source = new Source({
       orgId,
       fileName: req.file.originalname,
@@ -125,10 +127,36 @@ router.post('/', uploadScan, async (req, res, next) => {
       version: String(version).trim() || '1.0',
       effectiveDate: parsedEffectiveDate,
       expiryDate: parsedExpiryDate,
-      status: Source.SOURCE_STATUSES.includes(status) ? status : 'ready',
+      status: 'processing',
     });
 
     await source.save();
+
+    try {
+      await mlOrchestrator.indexSource({
+        sourceId: source._id,
+        orgId,
+        fileName: source.fileName,
+        mimeType: source.mimeType,
+        version: source.version,
+        expiryDate: source.expiryDate,
+        ownerName: source.ownerName,
+        status: requestedStatus,
+        content: req.file.buffer,
+      });
+      source.status = requestedStatus === 'active' ? 'active' : 'ready';
+      await source.save();
+    } catch (indexErr) {
+      console.error('[sources] ML indexing error:', indexErr);
+      source.status = 'error';
+      await source.save();
+      return res.status(502).json({
+        success: false,
+        error: `Failed to index source: ${indexErr.message}`,
+        code: 'INDEXING_FAILED',
+        sourceId: source._id,
+      });
+    }
 
     // Generate presigned download URL for immediate access if possible
     let downloadUrl = null;

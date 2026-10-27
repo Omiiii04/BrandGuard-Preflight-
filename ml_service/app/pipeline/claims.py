@@ -4,7 +4,7 @@ from typing import Any, Iterable, Optional
 import re
 
 from .judge import judge_claim
-
+from .retriever import retrieve_passage
 
 SUPERLATIVE_RE = re.compile(
     r"\b(?:best|only|fastest|leading|number one|#1)\b[^.!?,;:\n]*?"
@@ -21,32 +21,6 @@ DATE_RE = re.compile(
     r"\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{4})\b",
     re.IGNORECASE,
 )
-
-
-def _tokens(text: str) -> set[str]:
-    tokens = set(re.findall(r"[a-z0-9]+", text.lower()))
-    return {token[:-1] if token.endswith("s") and len(token) > 3 else token for token in tokens}
-
-
-def retrieve_passage(
-    claim_text: str,
-    passages: Iterable[dict[str, Any]],
-    org_id: Optional[str] = None,
-) -> Optional[dict[str, Any]]:
-    """Pick the highest lexical-overlap eligible passage."""
-    claim_tokens = _tokens(claim_text)
-    best: tuple[float, Optional[dict[str, Any]]] = (0.0, None)
-    for passage in passages:
-        passage_org = passage.get("orgId")
-        if org_id and passage_org and str(passage_org) != str(org_id):
-            continue
-        if passage.get("status") in {"deleted", "blocked"}:
-            continue
-        passage_tokens = _tokens(str(passage.get("text", "")))
-        score = len(claim_tokens & passage_tokens) / max(1, len(claim_tokens))
-        if score > best[0]:
-            best = (score, passage)
-    return best[1] if best[0] >= 0.20 else None
 
 
 def meaning_check(original: str, suggested_fix: str, intent: Optional[dict[str, Any]]) -> dict[str, list[str]]:
@@ -138,11 +112,15 @@ def extract_claims(
                 }
             else:
                 judged = judge_claim(span_text, passage)
+        proof_source_id = None
+        if judged["proofPassageId"]:
+            proof_source_id = (passage or {}).get("sourceId") or judged["proofPassageId"]
         fix = suggested_fix(span_text, judged["verdict"])
         evidence = None
         if passage and judged["proofPassageId"]:
             evidence = {
                 "passageId": str(passage.get("passageId", "")),
+                "sourceId": str(passage.get("sourceId", "")) if passage.get("sourceId") else None,
                 "fileName": passage.get("fileName", ""),
                 "page": passage.get("page"),
                 "version": passage.get("version", ""),
@@ -158,7 +136,7 @@ def extract_claims(
                 "verdict": judged["verdict"],
                 "confidence": judged["confidence"],
                 "ruleId": rule_id,
-                "proofPassageId": judged["proofPassageId"],
+                "proofPassageId": proof_source_id,
                 "suggestedFix": fix,
                 "meaningCheck": meaning_check(span_text, fix, intent),
                 "explanation": judged["explanation"],

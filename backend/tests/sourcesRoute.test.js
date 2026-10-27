@@ -15,6 +15,7 @@ process.env.JWT_SECRET = JWT_SECRET;
 const Source = require('../src/models/Source');
 const User = require('../src/models/User');
 const minio = require('../src/utils/minio');
+const mlOrchestrator = require('../src/services/mlOrchestrator');
 
 describe('/v1/sources API Endpoints', () => {
   let server;
@@ -22,15 +23,22 @@ describe('/v1/sources API Endpoints', () => {
   let testOrgId;
   let testUserId;
   let authToken;
+  let indexCalls;
 
   // Stubs for MinIO & Mongo
   const originalUploadObject = minio.uploadObject;
   const originalGetPresignedUrl = minio.getPresignedUrl;
   const originalFindById = User.findById;
+  const originalIndexSource = mlOrchestrator.indexSource;
 
   before(async () => {
     testOrgId = new mongoose.Types.ObjectId();
     testUserId = new mongoose.Types.ObjectId();
+    indexCalls = [];
+    mlOrchestrator.indexSource = async (payload) => {
+      indexCalls.push(payload);
+      return { indexed: true, status: 'indexed', sourceId: String(payload.sourceId), orgId: String(payload.orgId), passageCount: 1 };
+    };
 
     // Generate valid JWT token
     authToken = jwt.sign(
@@ -104,6 +112,7 @@ describe('/v1/sources API Endpoints', () => {
     minio.uploadObject = originalUploadObject;
     minio.getPresignedUrl = originalGetPresignedUrl;
     User.findById = originalFindById;
+    mlOrchestrator.indexSource = originalIndexSource;
 
     if (server) {
       await new Promise((resolve) => server.close(resolve));
@@ -213,10 +222,45 @@ describe('/v1/sources API Endpoints', () => {
         assert.equal(data.version, '2.5');
         assert.equal(data.ownerName, 'Jane Knowledge Owner');
         assert.equal(data.type, 'guideline');
+        assert.equal(indexCalls.length, 1);
+        assert.equal(indexCalls[0].fileName, 'brand_guidelines.pdf');
+        assert.equal(indexCalls[0].content.toString(), '%PDF-1.4 mock content of brand guide');
         assert.ok(data.storageRef.startsWith(`sources/${testOrgId}`));
         assert.ok(data.downloadUrl);
       } finally {
         Source.prototype.save = originalSave;
+      }
+    });
+
+    it('marks a source error when ML indexing fails after storage', async () => {
+      const originalSave = Source.prototype.save;
+      const originalIndexSource = mlOrchestrator.indexSource;
+      const statuses = [];
+      Source.prototype.save = async function () {
+        this._id = this._id || new mongoose.Types.ObjectId();
+        statuses.push(this.status);
+        return this;
+      };
+      mlOrchestrator.indexSource = async () => {
+        throw new Error('parser unavailable');
+      };
+
+      try {
+        const form = new FormData();
+        form.append('file', new Blob(['plain text'], { type: 'text/markdown' }), 'policy.md');
+        const res = await fetch(`${baseUrl}/v1/sources`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${authToken}` },
+          body: form,
+        });
+
+        assert.equal(res.status, 502);
+        const data = await res.json();
+        assert.equal(data.code, 'INDEXING_FAILED');
+        assert.deepEqual(statuses.slice(-2), ['processing', 'error']);
+      } finally {
+        Source.prototype.save = originalSave;
+        mlOrchestrator.indexSource = originalIndexSource;
       }
     });
   });

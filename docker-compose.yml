@@ -43,7 +43,8 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
       - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml:8000}
-      - DEMO_MODE=${DEMO_MODE:-true}
+      - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:-brandguard-ml-internal-dev-token}
+      - DEMO_MODE=${DEMO_MODE:-false}
       - JWT_SECRET=${JWT_SECRET:-brandguard-super-secret-jwt-key-2026}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
     depends_on:
@@ -79,6 +80,9 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-brandguard}
+      - INDEX_DIR=/app/indexes
+      - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:-brandguard-ml-internal-dev-token}
+      - DEMO_MODE=${DEMO_MODE:-false}
     volumes:
       - faiss_data:/app/indexes
     depends_on:

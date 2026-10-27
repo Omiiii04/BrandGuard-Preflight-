@@ -1,9 +1,12 @@
 """BrandGuard's offline-capable FastAPI ML boundary."""
 
-from typing import Any, Dict, List, Optional
+import base64
+import hashlib
+import os
 import re
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .pipeline.claims import (
@@ -13,7 +16,9 @@ from .pipeline.claims import (
     suggested_fix,
 )
 from .pipeline.image_checks import analyze_image
+from .pipeline.indexer import PersistentLexicalIndex
 from .pipeline.judge import judge_claim
+from .pipeline.parser import DocumentParseError, parse_document
 
 
 app = FastAPI(
@@ -58,6 +63,24 @@ STELLARA_PASSAGES: List[Dict[str, Any]] = [
     },
 ]
 
+INDEX = PersistentLexicalIndex(os.getenv("INDEX_DIR", "indexes"))
+
+
+def _demo_enabled() -> bool:
+    return os.getenv("DEMO_MODE", "false").lower() == "true"
+
+
+def _passages_for_request(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    explicit = payload.get("passages")
+    if isinstance(explicit, list):
+        return explicit
+    org_id = str(payload.get("orgId")) if payload.get("orgId") else ""
+    if org_id:
+        indexed = INDEX.passages_for_org(org_id)
+        if indexed or not _demo_enabled():
+            return indexed
+    return STELLARA_PASSAGES if _demo_enabled() else []
+
 
 def _require_fields(payload: Dict[str, Any], *fields: str) -> None:
     if not isinstance(payload, dict) or any(field not in payload for field in fields):
@@ -65,7 +88,7 @@ def _require_fields(payload: Dict[str, Any], *fields: str) -> None:
 
 
 def _retrieve_passage(claim_text: str, passages: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
-    return retrieve_passage(claim_text, passages or STELLARA_PASSAGES)
+    return retrieve_passage(claim_text, passages or [])
 
 
 def _nli_verdict(claim_text: str, passage_text: str) -> Dict[str, Any]:
@@ -83,7 +106,7 @@ def _build_meaning_check(original: str, fix: str, intent: Dict[str, Any]) -> Dic
 
 
 def _detect_claims(content: str, intent: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return extract_claims_pipeline(content, STELLARA_PASSAGES, intent)
+    return extract_claims_pipeline(content, _passages_for_request({"intent": intent}), intent)
 
 
 def _public_passage(passage: Dict[str, Any]) -> Dict[str, Any]:
@@ -107,6 +130,43 @@ def root() -> Dict[str, Any]:
     return {"name": "BrandGuard Preflight ML API", "version": "1.0.0"}
 
 
+@app.post("/index-source")
+def index_source(payload: Dict[str, Any], internal_token: Optional[str] = Header(default=None, alias="X-ML-Internal-Token")) -> Dict[str, Any]:
+    expected_token = os.getenv("ML_INTERNAL_TOKEN", "")
+    if not expected_token:
+        raise HTTPException(status_code=503, detail="ML_INTERNAL_TOKEN is not configured")
+    if internal_token != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid internal service token")
+    _require_fields(payload, "sourceId", "orgId", "fileName", "contentBase64")
+    try:
+        content = base64.b64decode(payload["contentBase64"], validate=True)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail={"code": "INVALID_CONTENT", "message": "contentBase64 is invalid"})
+    try:
+        document = parse_document(content, str(payload["fileName"]), payload.get("mimeType"))
+        passages = INDEX.ingest(document, {
+            "sourceId": str(payload["sourceId"]),
+            "orgId": str(payload["orgId"]),
+            "fileName": str(payload["fileName"]),
+            "version": str(payload.get("version") or "1.0"),
+            "expiryDate": payload.get("expiryDate"),
+            "ownerName": str(payload.get("ownerName") or ""),
+            "status": str(payload.get("status") or "ready"),
+        })
+    except DocumentParseError as error:
+        raise HTTPException(status_code=422, detail={"code": error.code, "message": str(error)}) from error
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(status_code=500, detail={"code": "INDEX_FAILED", "message": str(error)}) from error
+    return {
+        "indexed": True,
+        "status": "indexed",
+        "sourceId": str(payload["sourceId"]),
+        "orgId": str(payload["orgId"]),
+        "passageCount": len(passages),
+        "contentHash": hashlib.sha256(content).hexdigest(),
+    }
+
+
 @app.post("/extract-claims")
 def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
     _require_fields(payload, "content")
@@ -114,7 +174,7 @@ def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=422, detail="content must be a string")
     content = str(payload.get("content", ""))
     intent = payload.get("intent") if isinstance(payload.get("intent"), dict) else {}
-    passages = payload.get("passages") if isinstance(payload.get("passages"), list) else STELLARA_PASSAGES
+    passages = _passages_for_request(payload)
     guidelines = payload.get("guidelines") if isinstance(payload.get("guidelines"), dict) else {}
     image_context = payload.get("imageContext") if isinstance(payload.get("imageContext"), dict) else None
     claims = extract_claims_pipeline(
@@ -130,7 +190,7 @@ def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 @app.post("/match")
 def match_passages(payload: Dict[str, Any]) -> Dict[str, Any]:
-    passages = payload.get("passages") if isinstance(payload.get("passages"), list) else STELLARA_PASSAGES
+    passages = _passages_for_request(payload)
     source_claims = payload.get("claims")
     if not isinstance(source_claims, list):
         text = str(payload.get("claim", ""))
@@ -179,7 +239,7 @@ def premortem_check(payload: Dict[str, Any]) -> Dict[str, Any]:
             risk_line = candidate
             break
     if not risk_line:
-        candidate_claims = extract_claims_pipeline(content, STELLARA_PASSAGES, payload.get("intent"))
+        candidate_claims = extract_claims_pipeline(content, _passages_for_request(payload), payload.get("intent"))
         risk_line = next((claim["text"] for claim in candidate_claims if claim["verdict"] != "Supported"), "")
     if not risk_line and content:
         risk_line = re.split(r"[.!?\n]", content, maxsplit=1)[0].strip()

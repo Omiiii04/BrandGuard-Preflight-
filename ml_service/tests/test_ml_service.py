@@ -6,6 +6,11 @@ from fastapi import HTTPException
 from app.main import detect_entities, extract_claims, image_check, premortem_check
 
 
+@pytest.fixture
+def demo_mode(monkeypatch):
+    monkeypatch.setenv("DEMO_MODE", "true")
+
+
 def test_typed_response_schema_module_exists():
     assert importlib.util.find_spec("app.schemas.responses") is not None
 
@@ -17,7 +22,7 @@ def test_extract_claims_rejects_missing_content():
     assert error.value.status_code == 422
 
 
-def test_extracts_exact_superlative_span_and_flags_it():
+def test_extracts_exact_superlative_span_and_flags_it(demo_mode):
     content = "Our promise: best returns in India for every customer."
 
     claims = extract_claims({"content": content, "intent": {}})["claims"]
@@ -28,7 +33,7 @@ def test_extracts_exact_superlative_span_and_flags_it():
     assert claim["suggestedFix"]
 
 
-def test_supported_current_return_claim_is_not_flagged():
+def test_supported_current_return_claim_is_not_flagged(demo_mode):
     content = "Customers may return eligible items within 30 days of delivery."
 
     claims = extract_claims({"content": content, "intent": {}})["claims"]
@@ -38,7 +43,7 @@ def test_supported_current_return_claim_is_not_flagged():
     assert claim["confidence"] > 0.9
 
 
-def test_unknown_quantitative_claim_is_not_found_without_evidence():
+def test_unknown_quantitative_claim_is_not_found_without_evidence(demo_mode):
     content = "Customers may return eligible items within 45 days of delivery."
 
     claims = extract_claims({"content": content, "intent": {}})["claims"]
@@ -48,7 +53,7 @@ def test_unknown_quantitative_claim_is_not_found_without_evidence():
     assert claim["proofPassageId"] is None
 
 
-def test_superseded_return_window_is_outdated():
+def test_superseded_return_window_is_outdated(demo_mode):
     claims = extract_claims(
         {"content": "Customers may return eligible items within 14 days of delivery.", "intent": {}}
     )["claims"]
@@ -73,7 +78,7 @@ def test_watchlist_entities_are_case_insensitive_and_keep_overlapping_spans():
     assert all(item["isWatchlisted"] for item in response["entities"])
 
 
-def test_premortem_highest_risk_line_is_verbatim_from_draft():
+def test_premortem_highest_risk_line_is_verbatim_from_draft(demo_mode):
     content = "Our promise is best returns in India."
 
     response = premortem_check({"content": content, "findings": []})
@@ -107,7 +112,7 @@ def test_image_checks_report_palette_contrast_and_alt_text():
     assert results["alt-text"]["passed"] is True
 
 
-def test_stellara_demo_returns_three_distinct_claims_with_offsets_and_evidence():
+def test_stellara_demo_returns_three_distinct_claims_with_offsets_and_evidence(demo_mode):
     content = (
         "We offer best returns in India for customers. "
         "Eligible items may be returned within 14 days of delivery. "

@@ -134,6 +134,58 @@ test('ML orchestrator forwards only redacted content and validates the response'
   }
 });
 
+test('ML source indexing sends uploaded bytes with the internal token', async () => {
+  const { indexSource } = require('../src/services/mlOrchestrator');
+  let received;
+  let token;
+  const server = http.createServer((req, res) => {
+    token = req.headers['x-ml-internal-token'];
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      received = JSON.parse(body);
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        indexed: true,
+        status: 'indexed',
+        sourceId: received.sourceId,
+        orgId: received.orgId,
+        passageCount: 1,
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const previousUrl = process.env.ML_SERVICE_URL;
+  const previousToken = process.env.ML_INTERNAL_TOKEN;
+  process.env.ML_SERVICE_URL = `http://127.0.0.1:${server.address().port}`;
+  process.env.ML_INTERNAL_TOKEN = 'test-internal-token';
+
+  try {
+    const result = await indexSource({
+      sourceId: '507f1f77bcf86cd799439011',
+      orgId: '507f1f77bcf86cd799439012',
+      fileName: 'policy.md',
+      mimeType: 'text/markdown',
+      version: '1.0',
+      status: 'ready',
+      content: Buffer.from('within 30 days').toString('utf8'),
+      timeoutMs: 500,
+    });
+
+    assert.equal(result.passageCount, 1);
+    assert.equal(token, 'test-internal-token');
+    assert.equal(received.sourceId, '507f1f77bcf86cd799439011');
+    assert.equal(received.orgId, '507f1f77bcf86cd799439012');
+    assert.equal(Buffer.from(received.contentBase64, 'base64').toString('utf8'), 'within 30 days');
+  } finally {
+    if (previousUrl === undefined) delete process.env.ML_SERVICE_URL;
+    else process.env.ML_SERVICE_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.ML_INTERNAL_TOKEN;
+    else process.env.ML_INTERNAL_TOKEN = previousToken;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('frontend live path uses the backend findings envelope and action field names', () => {
   const source = fs.readFileSync(
     path.join(root, 'frontend', 'src', 'pages', 'ReviewPage.jsx'),
