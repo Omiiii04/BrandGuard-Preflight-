@@ -13,16 +13,20 @@ def _tokens(text: str) -> set[str]:
     return {token[:-1] if token.endswith("s") and len(token) > 3 else token for token in tokens}
 
 
-def _active(passage: dict[str, Any]) -> bool:
-    if passage.get("status") in EXCLUDED_STATUSES:
+def _active(passage: dict[str, Any], check_expiry: bool = True) -> bool:
+    status = str(passage.get("status") or "ready").lower()
+    if status in EXCLUDED_STATUSES:
         return False
     expiry = passage.get("expiryDate")
     if expiry:
         try:
-            if date.fromisoformat(str(expiry)[:10]) < date.today():
+            expiry_date = date.fromisoformat(str(expiry)[:10])
+            if check_expiry and expiry_date < date.today():
                 return False
         except ValueError:
-            pass
+            # Invalid expiry metadata must fail closed rather than treating stale
+            # evidence as current, even when preserving an Outdated verdict.
+            return False
     return True
 
 
@@ -38,21 +42,25 @@ def retrieve_passages(query: str, org_id: str, index: Any, top_k: int = 5) -> li
         score = len(query_tokens & passage_tokens) / max(1, len(query_tokens))
         if score >= 0.20:
             matches.append({**passage, "score": score})
-    matches.sort(key=lambda item: (-item["score"], item["passageId"]))
+    matches.sort(key=lambda item: (-item["score"], str(item.get("passageId", ""))))
     return matches[:top_k]
 
 
 def retrieve_passage(query: str, passages: list[dict[str, Any]], org_id: str | None = None) -> dict[str, Any] | None:
-    """Compatibility retrieval for explicit test passages and controlled calls."""
+    """Compatibility retrieval; applies the same lifecycle policy as indexed retrieval."""
     query_tokens = _tokens(query)
     matches = []
     for passage in passages:
         if org_id and passage.get("orgId") and str(passage.get("orgId")) != str(org_id):
             continue
-        if passage.get("status") in {"deleted", "blocked"}:
+        # Date-expired evidence may be selected only so judge_claim can return
+        # an explicit Outdated verdict. Lifecycle states such as expired and
+        # superseded are always excluded, so inactive material is never treated
+        # as current evidence.
+        if not _active(passage, check_expiry=False):
             continue
         score = len(query_tokens & _tokens(str(passage.get("text", "")))) / max(1, len(query_tokens))
         if score >= 0.20:
             matches.append({**passage, "score": score})
-    matches.sort(key=lambda item: (-item["score"], item.get("passageId", "")))
+    matches.sort(key=lambda item: (-item["score"], str(item.get("passageId", ""))))
     return matches[0] if matches else None

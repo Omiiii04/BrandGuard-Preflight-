@@ -64,6 +64,17 @@ router.post('/', requireRole('creator', 'editor', 'manager', 'reviewer', 'admin'
       });
     }
 
+    // New uploads may only enter the active or ready state. Lifecycle states
+    // such as expired/superseded must be applied through the metadata update path.
+    if (!['active', 'ready'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'New source uploads must use status active or ready.',
+        code: 'INVALID_INITIAL_STATUS',
+      });
+    }
+    const requestedStatus = status;
+
     // Generate safe, unique storage key in MinIO: sources/<orgId>/<uuid>-<safeFilename>
     const randomSuffix = crypto.randomBytes(8).toString('hex');
     const safeBaseName = path
@@ -116,7 +127,6 @@ router.post('/', requireRole('creator', 'editor', 'manager', 'reviewer', 'admin'
     }
 
     // Save Source document to MongoDB
-    const requestedStatus = Source.SOURCE_STATUSES.includes(status) ? status : 'ready';
     const source = new Source({
       orgId,
       fileName: req.file.originalname,
@@ -341,7 +351,45 @@ router.patch('/:id', requireRole('manager', 'reviewer', 'admin', 'knowledge_owne
       source.status = status;
     }
 
+    // Fail closed around the MongoDB/index boundary: first mark indexed
+    // passages as processing (ineligible for retrieval), then persist MongoDB,
+    // then apply the final lifecycle metadata. If a later step fails, passages
+    // remain excluded instead of being temporarily reactivated as stale evidence.
+    try {
+      await mlOrchestrator.updateSourceMetadata({
+        sourceId: source._id,
+        orgId,
+        status: 'processing',
+      });
+    } catch (syncErr) {
+      console.error('[sources] ML lifecycle quarantine error:', syncErr);
+      return res.status(502).json({
+        success: false,
+        error: 'Could not quarantine source passages before updating lifecycle metadata.',
+        code: 'SOURCE_METADATA_SYNC_FAILED',
+      });
+    }
+
     await source.save();
+
+    try {
+      await mlOrchestrator.updateSourceMetadata({
+        sourceId: source._id,
+        orgId,
+        status: source.status,
+        expiryDate: source.expiryDate,
+        ownerName: source.ownerName,
+        version: source.version,
+      });
+    } catch (syncErr) {
+      console.error('[sources] ML metadata sync error; passages remain quarantined:', syncErr);
+      return res.status(502).json({
+        success: false,
+        error: 'Source was saved, but the ML index remains quarantined until metadata synchronization succeeds.',
+        code: 'SOURCE_METADATA_SYNC_FAILED',
+      });
+    }
+
     return res.status(200).json(source.toObject());
   } catch (err) {
     return next(err);

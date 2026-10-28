@@ -26,12 +26,27 @@
 
 const http  = require('http');
 const https = require('https');
+const fs    = require('fs');
+const path  = require('path');
 const { URL } = require('url');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
 const API_URL = (process.env.API_URL || 'http://localhost:4000').replace(/\/$/, '');
 const ML_URL  = (process.env.ML_URL  || 'http://localhost:8000').replace(/\/$/, '');
+
+function readMlInternalToken() {
+  if (process.env.ML_INTERNAL_TOKEN) return process.env.ML_INTERNAL_TOKEN;
+  try {
+    const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+    const match = envText.match(/^\s*ML_INTERNAL_TOKEN\s*=\s*(.*?)\s*$/m);
+    return match ? match[1].split('#')[0].trim().replace(/^(['"])(.*)\1$/, '$2').trim() : '';
+  } catch (_error) {
+    return '';
+  }
+}
+
+const ML_INTERNAL_TOKEN = readMlInternalToken();
 const INTEGRATION_MARKER = process.env.INTEGRATION_MARKER || `integration-run-${Date.now()}`;
 
 // Stellara Brands draft content (returns-policy scenario)
@@ -269,6 +284,15 @@ async function run() {
 
   let mlClaims = [];
   try {
+    const unauthenticated = await request('POST', `${ML_URL}/extract-claims`, { content: 'security probe' });
+    if (unauthenticated.status === 401) {
+      pass('ML private endpoint rejects requests without an internal token');
+    } else {
+      fail('ML private endpoint did not reject an unauthenticated request', `HTTP ${unauthenticated.status}`);
+    }
+    if (!ML_INTERNAL_TOKEN) {
+      throw new Error('ML_INTERNAL_TOKEN is missing. Set it in .env or the process environment.');
+    }
     const { status, data } = await request('POST', `${ML_URL}/extract-claims`, {
       content : STELLARA_DRAFT_CONTENT,
       orgId   : 'integration-test-org',
@@ -284,7 +308,7 @@ async function run() {
         ownerName: 'Integration Test',
         text: UPLOADED_POLICY_CONTENT,
       }],
-    });
+    }, { 'X-ML-Internal-Token': ML_INTERNAL_TOKEN });
 
     if (status !== 200) {
       fail(`ML /extract-claims returned HTTP ${status}`, JSON.stringify(data));

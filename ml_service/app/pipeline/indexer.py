@@ -96,5 +96,23 @@ class PersistentLexicalIndex:
         self._save()
         return passages
 
+    def update_source_metadata(
+        self, org_id: str, source_id: str, updates: dict[str, Any]
+    ) -> int:
+        """Update lifecycle metadata for all passages belonging to one source."""
+        allowed = {"status", "expiryDate", "ownerName", "version"}
+        safe_updates = {key: value for key, value in updates.items() if key in allowed}
+        changed = 0
+        for passage in self._state["passages"]:
+            if str(passage.get("orgId")) != str(org_id):
+                continue
+            if str(passage.get("sourceId")) != str(source_id):
+                continue
+            passage.update(safe_updates)
+            changed += 1
+        if changed:
+            self._save()
+        return changed
+
     def passages_for_org(self, org_id: str) -> list[dict[str, Any]]:
         return [p for p in self._state["passages"] if str(p.get("orgId")) == str(org_id)]

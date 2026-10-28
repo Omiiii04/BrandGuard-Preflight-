@@ -150,14 +150,17 @@ BrandGuard-Preflight-/
 Run the complete multi-service stack with a single command:
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/somnath-jamadar09/BrandGuard-Preflight-.git
+# 1. Clone the repository
+git clone https://github.com/Omiiii04/BrandGuard-Preflight-.git
 cd BrandGuard-Preflight-
 
 # 2. Configure environment
 cp .env.example .env
 
-# 3. Launch all containers
+# 3. Generate a unique shared secret (paste the output into ML_INTERNAL_TOKEN in .env)
+openssl rand -hex 32
+
+# 4. Launch all containers (Compose intentionally refuses an empty ML_INTERNAL_TOKEN)
 docker compose up --build -d
 ```
 
@@ -168,6 +171,8 @@ docker compose up --build -d
 | **Frontend Web** | `3000` | [http://localhost:3000](http://localhost:3000) | React Web Application |
 | **Backend API** | `4000` | [http://localhost:4000](http://localhost:4000) | Express REST API (`/health`, `/v1/*`) |
 | **ML Engine** | `8000` | [http://localhost:8000](http://localhost:8000) | FastAPI ML Service (`/docs`) |
+
+The ML Engine binds to loopback (`127.0.0.1:8000`) for local diagnostics and is not published to the LAN. All non-health ML POST endpoints require the backend-to-ML `X-ML-Internal-Token` header; do not expose this service publicly.
 | **MinIO Console** | `9001` | [http://localhost:9001](http://localhost:9001) | S3 Object Store Dashboard (user: `minioadmin` / pass: `minioadmin`) |
 | **MongoDB** | `27017` | `mongodb://localhost:27017` | Document Database |
 

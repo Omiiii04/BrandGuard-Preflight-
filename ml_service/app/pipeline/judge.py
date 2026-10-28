@@ -22,7 +22,7 @@ def judge_claim(claim_text: str, passage: Optional[dict[str, Any]]) -> dict[str,
     expiry = passage.get("expiryDate")
     if expiry:
         try:
-            if date.fromisoformat(str(expiry)) < date.today():
+            if date.fromisoformat(str(expiry)[:10]) < date.today():
                 return {
                     "verdict": "Outdated",
                     "confidence": 0.89,
