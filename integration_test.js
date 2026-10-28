@@ -35,18 +35,28 @@ const { URL } = require('url');
 const API_URL = (process.env.API_URL || 'http://localhost:4000').replace(/\/$/, '');
 const ML_URL  = (process.env.ML_URL  || 'http://localhost:8000').replace(/\/$/, '');
 
-function readMlInternalToken() {
-  if (process.env.ML_INTERNAL_TOKEN) return process.env.ML_INTERNAL_TOKEN;
+function readLocalEnvValue(name) {
   try {
     const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
-    const match = envText.match(/^\s*ML_INTERNAL_TOKEN\s*=\s*(.*?)\s*$/m);
-    return match ? match[1].split('#')[0].trim().replace(/^(['"])(.*)\1$/, '$2').trim() : '';
+    const keyPattern = new RegExp('^\\s*' + name + '\\s*=');
+    const line = envText.split(/\r?\n/).find((entry) => keyPattern.test(entry));
+    if (!line) return '';
+    let value = line.slice(line.indexOf('=') + 1).split('#')[0].trim();
+    if ((value.startsWith('\"') && value.endsWith('\"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    return value.trim();
   } catch (_error) {
     return '';
   }
 }
 
+function readMlInternalToken() {
+  return process.env.ML_INTERNAL_TOKEN || readLocalEnvValue('ML_INTERNAL_TOKEN');
+}
+
 const ML_INTERNAL_TOKEN = readMlInternalToken();
+
 const INTEGRATION_MARKER = process.env.INTEGRATION_MARKER || `integration-run-${Date.now()}`;
 
 // Stellara Brands draft content (returns-policy scenario)
@@ -189,7 +199,10 @@ async function getOrSeedToken() {
   try {
     const mongoose = integrationMongoose = require('./backend/node_modules/mongoose');
     const jwt = require('./backend/node_modules/jsonwebtoken');
-    const secret = process.env.JWT_SECRET || 'brandguard-super-secret-jwt-key-change-me-in-production';
+    const secret = process.env.JWT_SECRET || readLocalEnvValue('JWT_SECRET');
+    if (!secret || secret.length < 32) {
+      throw new Error('JWT_SECRET is missing or too short. Run scripts/setup-env.ps1 or set JWT_SECRET in the environment.');
+    }
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/brandguard';
 
     if (mongoose.connection.readyState === 0) {

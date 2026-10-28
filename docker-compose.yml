@@ -45,7 +45,7 @@ services:
       - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml:8000}
       - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:?Set a strong random ML_INTERNAL_TOKEN in .env}
       - DEMO_MODE=${DEMO_MODE:-false}
-      - JWT_SECRET=${JWT_SECRET:-brandguard-super-secret-jwt-key-2026}
+      - JWT_SECRET=${JWT_SECRET:?Set a strong random JWT_SECRET in .env}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
     depends_on:
       mongo:
