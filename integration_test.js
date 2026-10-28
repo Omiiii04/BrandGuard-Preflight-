@@ -39,9 +39,13 @@ function readLocalEnvValue(name) {
   try {
     const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
     const keyPattern = new RegExp('^\\s*' + name + '\\s*=');
-    const line = envText.split(/\\r?\\n/).find((entry) => keyPattern.test(entry));
+    const line = envText.split(/\r?\n/).find((entry) => keyPattern.test(entry));
     if (!line) return '';
-    return line.slice(line.indexOf('=') + 1).split('#')[0].trim().replace(/^(['\"])(.*)\\1$/, '$2').trim();
+    let value = line.slice(line.indexOf('=') + 1).split('#')[0].trim();
+    if ((value.startsWith('\"') && value.endsWith('\"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    return value.trim();
   } catch (_error) {
     return '';
   }
