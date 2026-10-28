@@ -38,19 +38,21 @@ const ML_URL  = (process.env.ML_URL  || 'http://localhost:8000').replace(/\/$/, 
 function readLocalEnvValue(name) {
   try {
     const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\function readMlInternalToken() {
-  if (process.env.ML_INTERNAL_TOKEN) return process.env.ML_INTERNAL_TOKEN;
-  try {
-    const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
-    const match = envText.match(/^\s*ML_INTERNAL_TOKEN\s*=\s*(.*?)\s*$/m);
-    return match ? match[1].split('#')[0].trim().replace(/^(['"])(.*)\1$/, '$2').trim() : '';
+    const keyPattern = new RegExp('^\\s*' + name + '\\s*=');
+    const line = envText.split(/\\r?\\n/).find((entry) => keyPattern.test(entry));
+    if (!line) return '';
+    return line.slice(line.indexOf('=') + 1).split('#')[0].trim().replace(/^(['\"])(.*)\\1$/, '$2').trim();
   } catch (_error) {
     return '';
   }
 }
 
-const ML_INTERNAL_TOKEN = readMlInternalToken();');
-    const match = envText.match(new RegExp('^\\s*' + escapedName + '\\s*=\\s*(.*?)\\s*
+function readMlInternalToken() {
+  return process.env.ML_INTERNAL_TOKEN || readLocalEnvValue('ML_INTERNAL_TOKEN');
+}
+
+const ML_INTERNAL_TOKEN = readMlInternalToken();
+
 const INTEGRATION_MARKER = process.env.INTEGRATION_MARKER || `integration-run-${Date.now()}`;
 
 // Stellara Brands draft content (returns-policy scenario)
