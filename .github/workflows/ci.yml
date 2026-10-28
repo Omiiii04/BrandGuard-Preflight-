@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ml-service:
     name: ML service tests
@@ -71,4 +75,124 @@ jobs:
       - name: Validate required token and Compose syntax
         run: |
           export ML_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+          export JWT_SECRET="$(openssl rand -hex 64)"
           docker compose config --quiet
+
+  full-stack-integration:
+    name: Full-stack integration and persistence
+    runs-on: ubuntu-latest
+    needs: [ml-service, backend, frontend, compose-config]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install integration runner dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Generate ephemeral CI secrets
+        shell: bash
+        run: |
+          ML_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+          JWT_SECRET="$(openssl rand -hex 64)"
+          printf 'ML_INTERNAL_TOKEN=%s\nJWT_SECRET=%s\nDEMO_MODE=false\n' "$ML_INTERNAL_TOKEN" "$JWT_SECRET" > .env
+          {
+            echo "ML_INTERNAL_TOKEN=$ML_INTERNAL_TOKEN"
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "DEMO_MODE=false"
+          } >> "$GITHUB_ENV"
+      - name: Build and wait for all Compose services
+        run: docker compose up --build -d --wait --wait-timeout 300
+      - name: Run full upload-to-review integration test
+        env:
+          MONGODB_URI: mongodb://localhost:27017/brandguard
+        run: env -u ML_INTERNAL_TOKEN -u JWT_SECRET node integration_test.js
+      - name: Restart ML service and wait for health
+        shell: bash
+        run: |
+          docker compose restart ml
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              echo "ML service healthy after restart."
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --no-color ml
+          echo "ML service did not recover after restart." >&2
+          exit 1
+      - name: Verify indexed document survived ML restart
+        env:
+          MONGODB_URI: mongodb://localhost:27017/brandguard
+        run: env -u ML_INTERNAL_TOKEN -u JWT_SECRET node scripts/verify-ml-persistence.js
+      - name: Capture Compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color > compose-integration.log || true
+      - name: Upload Compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-integration-logs
+          path: compose-integration.log
+          if-no-files-found: ignore
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down
+
+  windows-environment-setup:
+    name: Windows PowerShell environment setup
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check local verification scripts parse cleanly
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-local.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+          node --check integration_test.js
+          if ($LASTEXITCODE -ne 0) { throw 'integration_test.js has a syntax error.' }
+          node --check scripts/verify-ml-persistence.js
+          if ($LASTEXITCODE -ne 0) { throw 'verify-ml-persistence.js has a syntax error.' }
+      - name: Exercise local verification orchestration with mocked services
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path 'backend/node_modules/mongoose' -Force | Out-Null
+          $global:mockCommands = [System.Collections.Generic.List[string]]::new()
+          function global:docker { $global:mockCommands.Add("docker $($args -join ' ')"); $global:LASTEXITCODE = 0 }
+          function global:node { $global:mockCommands.Add("node $($args -join ' ')"); $global:LASTEXITCODE = 0 }
+          function global:Invoke-RestMethod { param([string]$Uri, [int]$TimeoutSec); $global:mockCommands.Add("health $Uri"); return @{ status = 'healthy' } }
+          & .\scripts\verify-local.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Local verification script did not complete its mocked command path.' }
+          if (-not ($global:mockCommands -contains 'node integration_test.js')) { throw 'Integration test invocation is missing.' }
+          if (-not ($global:mockCommands -contains 'node scripts/verify-ml-persistence.js')) { throw 'Persistence verification invocation is missing.' }
+          if (-not ($global:mockCommands -contains 'docker compose up --build -d --wait --wait-timeout 300')) { throw 'Compose startup invocation is missing.' }
+          Write-Host 'PASS: local verification orchestration reaches integration and persistence checks.'
+      - name: Generate local secrets safely and verify idempotence
+        shell: pwsh
+        run: |
+          & .\scripts\setup-env.ps1
+          $lines = Get-Content .env
+          $mlLine = $lines | Where-Object { $_ -match '^ML_INTERNAL_TOKEN=' } | Select-Object -Last 1
+          $jwtLine = $lines | Where-Object { $_ -match '^JWT_SECRET=' } | Select-Object -Last 1
+          if (-not $mlLine -or -not $jwtLine) { throw 'Required environment keys are missing.' }
+          $mlToken = ($mlLine -split '=', 2)[1]
+          $jwtSecret = ($jwtLine -split '=', 2)[1]
+          if ($mlToken.Length -lt 64) { throw 'ML_INTERNAL_TOKEN is not strong enough.' }
+          if ($jwtSecret.Length -lt 128) { throw 'JWT_SECRET is not strong enough.' }
+          if (-not (git check-ignore .env)) { throw '.env must be ignored by git.' }
+          $output = (& .\scripts\setup-env.ps1 2>&1 | Out-String)
+          if ($output.Contains($mlToken) -or $output.Contains($jwtSecret)) { throw 'The setup helper printed a secret value.' }
+          $after = Get-Content .env
+          $mlAfter = (($after | Where-Object { $_ -match '^ML_INTERNAL_TOKEN=' } | Select-Object -Last 1) -split '=', 2)[1]
+          $jwtAfter = (($after | Where-Object { $_ -match '^JWT_SECRET=' } | Select-Object -Last 1) -split '=', 2)[1]
+          if ($mlAfter -ne $mlToken -or $jwtAfter -ne $jwtSecret) { throw 'The setup helper rotated an existing strong secret unexpectedly.' }
+          Write-Host 'PASS: secrets are strong, kept out of output, preserved on rerun, and .env is git-ignored.'

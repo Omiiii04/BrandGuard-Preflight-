@@ -157,12 +157,33 @@ cd BrandGuard-Preflight-
 # 2. Configure environment
 cp .env.example .env
 
-# 3. Generate a unique shared secret (paste the output into ML_INTERNAL_TOKEN in .env)
-openssl rand -hex 32
+# 3. Generate strong secrets and paste each result into .env
+openssl rand -hex 32  # ML_INTERNAL_TOKEN
+openssl rand -hex 64  # JWT_SECRET
 
-# 4. Launch all containers (Compose intentionally refuses an empty ML_INTERNAL_TOKEN)
+# 4. Launch all containers (Compose refuses empty secrets)
 docker compose up --build -d
 ```
+
+On Windows PowerShell, run the repository setup helper instead of manually copying secrets:
+
+```powershell
+.\scripts\setup-env.ps1
+docker compose config --quiet
+docker compose up --build -d
+```
+
+The helper creates `.env` if it is missing, generates strong `ML_INTERNAL_TOKEN` and `JWT_SECRET` values when needed, preserves other settings, and never prints the generated secret values.
+
+#### End-to-end verification (Windows)
+
+Run this single command from the repository root:
+
+```powershell
+.\scripts\verify-local.ps1
+```
+
+It creates or repairs local secrets without printing them, installs the backend test dependencies if needed, builds and starts the stack, runs the source-upload/draft-review integration test, restarts the ML service, and verifies that indexed evidence is still available afterward. It leaves the services running and does not delete Docker volumes. If verification fails, it saves Compose logs under your Windows temporary directory.
 
 #### Running Service Endpoints
 
@@ -171,10 +192,10 @@ docker compose up --build -d
 | **Frontend Web** | `3000` | [http://localhost:3000](http://localhost:3000) | React Web Application |
 | **Backend API** | `4000` | [http://localhost:4000](http://localhost:4000) | Express REST API (`/health`, `/v1/*`) |
 | **ML Engine** | `8000` | [http://localhost:8000](http://localhost:8000) | FastAPI ML Service (`/docs`) |
+| **MinIO Console** | `9001` | [http://localhost:9001](http://localhost:9001) | S3-compatible object storage console |
+| **MongoDB** | `27017` | `mongodb://localhost:27017` | Document Database |
 
 The ML Engine binds to loopback (`127.0.0.1:8000`) for local diagnostics and is not published to the LAN. All non-health ML POST endpoints require the backend-to-ML `X-ML-Internal-Token` header; do not expose this service publicly.
-| **MinIO Console** | `9001` | [http://localhost:9001](http://localhost:9001) | S3 Object Store Dashboard (user: `minioadmin` / pass: `minioadmin`) |
-| **MongoDB** | `27017` | `mongodb://localhost:27017` | Document Database |
 
 ---
 
