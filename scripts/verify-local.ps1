@@ -35,7 +35,7 @@ $composeEnvNames = @(
     'ML_INTERNAL_TOKEN', 'JWT_SECRET', 'MONGODB_URI',
     'WEB_PORT', 'API_PORT', 'ML_PORT', 'MONGO_PORT',
     'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'MINIO_ROOT_USER',
-    'MINIO_ROOT_PASSWORD', 'ML_SERVICE_URL', 'NODE_ENV', 'DEMO_MODE'
+    'MINIO_ROOT_PASSWORD', 'ML_SERVICE_URL', 'NODE_ENV', 'DEMO_MODE', 'API_URL', 'ML_URL'
 )
 $previousEnvironment = @{}
 foreach ($name in $composeEnvNames) {
@@ -90,7 +90,16 @@ try {
 
     $env:API_URL = "http://localhost:$apiPort"
     $env:ML_URL = "http://localhost:$mlPort"
-    $env:MONGODB_URI = "mongodb://localhost:$mongoPort/brandguard"
+    $configuredMongoUri = Read-EnvValue -Name 'MONGODB_URI'
+    if ($configuredMongoUri -match '^mongodb://mongo(?::|/)') {
+        # The Compose-only hostname "mongo" must become localhost for host-run test clients.
+        $env:MONGODB_URI = "mongodb://localhost:$mongoPort/brandguard"
+    } elseif ($configuredMongoUri) {
+        # Preserve an explicitly configured external MongoDB URI.
+        $env:MONGODB_URI = $configuredMongoUri
+    } else {
+        $env:MONGODB_URI = "mongodb://localhost:$mongoPort/brandguard"
+    }
 
     Invoke-CheckedNativeCommand -Label 'Run source upload and draft review integration test' -Command {
         node integration_test.js
