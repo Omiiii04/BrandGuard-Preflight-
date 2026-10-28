@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ml-service:
     name: ML service tests
@@ -139,6 +143,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check local verification scripts parse cleanly
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-local.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors) { throw ($parseErrors | Out-String) }
+          node --check integration_test.js
+          if ($LASTEXITCODE -ne 0) { throw 'integration_test.js has a syntax error.' }
+          node --check scripts/verify-ml-persistence.js
+          if ($LASTEXITCODE -ne 0) { throw 'verify-ml-persistence.js has a syntax error.' }
       - name: Generate local secrets safely and verify idempotence
         shell: pwsh
         run: |
