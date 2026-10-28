@@ -71,6 +71,7 @@ jobs:
       - name: Validate required token and Compose syntax
         run: |
           export ML_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+          export JWT_SECRET="$(openssl rand -hex 64)"
           docker compose config --quiet
 
   full-stack-integration:
