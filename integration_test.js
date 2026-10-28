@@ -635,19 +635,6 @@ run().catch((err) => {
     await integrationMongoose.connection.close();
   }
 });
-, 'm'));
-    return match ? match[1].split('#')[0].trim().replace(/^(['"])(.*)\\1$/, '$2').trim() : '';
-  } catch (_error) {
-    return '';
-  }
-}
-
-function readMlInternalToken() {
-  return process.env.ML_INTERNAL_TOKEN || readLocalEnvValue('ML_INTERNAL_TOKEN');
-}
-
-const ML_INTERNAL_TOKEN = readMlInternalToken();
-const INTEGRATION_MARKER = process.env.INTEGRATION_MARKER || `integration-run-${Date.now()}`;
 
 // Stellara Brands draft content (returns-policy scenario)
 const STELLARA_DRAFT_CONTENT = [
