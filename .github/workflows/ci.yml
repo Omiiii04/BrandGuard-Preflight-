@@ -72,3 +72,63 @@ jobs:
         run: |
           export ML_INTERNAL_TOKEN="$(openssl rand -hex 32)"
           docker compose config --quiet
+
+  full-stack-integration:
+    name: Full-stack integration and persistence
+    runs-on: ubuntu-latest
+    needs: [ml-service, backend, frontend, compose-config]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install integration runner dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Generate ephemeral CI secrets
+        shell: bash
+        run: |
+          echo "ML_INTERNAL_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "JWT_SECRET=$(openssl rand -hex 64)" >> "$GITHUB_ENV"
+          echo "DEMO_MODE=false" >> "$GITHUB_ENV"
+      - name: Build and wait for all Compose services
+        run: docker compose up --build -d --wait --wait-timeout 300
+      - name: Run full upload-to-review integration test
+        env:
+          MONGODB_URI: mongodb://localhost:27017/brandguard
+        run: node integration_test.js
+      - name: Restart ML service and wait for health
+        shell: bash
+        run: |
+          docker compose restart ml
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then
+              echo "ML service healthy after restart."
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --no-color ml
+          echo "ML service did not recover after restart." >&2
+          exit 1
+      - name: Verify indexed document survived ML restart
+        env:
+          MONGODB_URI: mongodb://localhost:27017/brandguard
+        run: node scripts/verify-ml-persistence.js
+      - name: Capture Compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color > compose-integration.log || true
+      - name: Upload Compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-integration-logs
+          path: compose-integration.log
+          if-no-files-found: ignore
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down
