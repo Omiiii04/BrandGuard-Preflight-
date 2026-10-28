@@ -1,0 +1,552 @@
+[
+  {
+    "id": "draft-01",
+    "content": "We offer the best returns in India.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-02",
+    "content": "Our platform is the fastest for checking a draft.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-03",
+    "content": "Stellara is the leading choice for online shoppers.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-04",
+    "content": "This is the only way to guarantee safe delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-05",
+    "content": "We are the number one retailer for returns.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-06",
+    "content": "The best product for every budget is here.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-07",
+    "content": "Our system gives the fastest checks for every campaign.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-08",
+    "content": "We are the market-leading brand in the sector.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-09",
+    "content": "Only our store has this exclusive deal.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-10",
+    "content": "Our return process is the best in the country.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-11",
+    "content": "Our checkout is the fastest with any retailer.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-12",
+    "content": "We are leading among all competitors.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-13",
+    "content": "The only authorized provider is our company.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-14",
+    "content": "We offer the best support for all customers.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-15",
+    "content": "This is the leading product worldwide.",
+    "expected": [
+      {
+        "ruleId": "rule.superlative.unqualified",
+        "verdict": "Contradicted"
+      }
+    ]
+  },
+  {
+    "id": "draft-16",
+    "content": "Eligible items may be returned within 30 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Supported"
+      }
+    ]
+  },
+  {
+    "id": "draft-17",
+    "content": "Customers may return qualifying products within 30 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Supported"
+      }
+    ]
+  },
+  {
+    "id": "draft-18",
+    "content": "The standard return window is within 30 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Supported"
+      }
+    ]
+  },
+  {
+    "id": "draft-19",
+    "content": "Our policy allows returns within 30 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Supported"
+      }
+    ]
+  },
+  {
+    "id": "draft-20",
+    "content": "Approved purchases are eligible for return within 30 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Supported"
+      }
+    ]
+  },
+  {
+    "id": "draft-21",
+    "content": "Eligible items may be returned within 14 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Outdated"
+      }
+    ]
+  },
+  {
+    "id": "draft-22",
+    "content": "Customers may return qualifying products within 14 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Outdated"
+      }
+    ]
+  },
+  {
+    "id": "draft-23",
+    "content": "The standard return window is within 14 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Outdated"
+      }
+    ]
+  },
+  {
+    "id": "draft-24",
+    "content": "Our policy allows returns within 14 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Outdated"
+      }
+    ]
+  },
+  {
+    "id": "draft-25",
+    "content": "Approved purchases are eligible for return within 14 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Outdated"
+      }
+    ]
+  },
+  {
+    "id": "draft-26",
+    "content": "Eligible items may be returned within 45 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-27",
+    "content": "Customers may return qualifying products within 45 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-28",
+    "content": "The standard return window is within 45 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-29",
+    "content": "Our policy allows returns within 45 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-30",
+    "content": "Approved purchases are eligible for return within 45 days of delivery.",
+    "expected": [
+      {
+        "ruleId": "rule.date.return-window",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-31",
+    "content": "Save 20% today.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-32",
+    "content": "Get 15.5% off selected items.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-33",
+    "content": "Our conversion rate improved by 99%.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-34",
+    "content": "Customers save 10% on every purchase.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-35",
+    "content": "The promotion delivers 2.5% cashback.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-36",
+    "content": "Up to 40% of users prefer this design.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-37",
+    "content": "We guarantee 100% satisfaction.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-38",
+    "content": "Prices are reduced by 12%.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-39",
+    "content": "The campaign lifted sales by 8.25%.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-40",
+    "content": "Only 3% of orders need support.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.percentage",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-41",
+    "content": "Order the starter plan for $19.99.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.price",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-42",
+    "content": "The premium package costs ₹1,299.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.price",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-43",
+    "content": "Replacement parts are priced at £49.50.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.price",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-44",
+    "content": "The service starts at €89.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.price",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-45",
+    "content": "One-time setup costs $2,499.00.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.price",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-46",
+    "content": "The promotion ends on June 30, 2026.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.date",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-47",
+    "content": "This offer begins on January 15, 2026.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.date",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-48",
+    "content": "Terms are revised on March 8, 2027.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.date",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-49",
+    "content": "The campaign closes on December 1, 2026.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.date",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-50",
+    "content": "New eligibility rules start on October 20, 2026.",
+    "expected": [
+      {
+        "ruleId": "rule.quantitative.date",
+        "verdict": "Not Found"
+      }
+    ]
+  },
+  {
+    "id": "draft-51",
+    "content": "Our returns policy is available on request.",
+    "expected": []
+  },
+  {
+    "id": "draft-52",
+    "content": "Please contact support for eligibility details.",
+    "expected": []
+  },
+  {
+    "id": "draft-53",
+    "content": "Product availability can vary by location.",
+    "expected": []
+  },
+  {
+    "id": "draft-54",
+    "content": "Read the instructions before submitting a request.",
+    "expected": []
+  },
+  {
+    "id": "draft-55",
+    "content": "Customers can review the terms before purchase.",
+    "expected": []
+  },
+  {
+    "id": "draft-56",
+    "content": "Support teams answer questions about delivery.",
+    "expected": []
+  },
+  {
+    "id": "draft-57",
+    "content": "Use the approved product name in this section.",
+    "expected": []
+  },
+  {
+    "id": "draft-58",
+    "content": "The campaign copy describes the product features.",
+    "expected": []
+  },
+  {
+    "id": "draft-59",
+    "content": "Please confirm the final image before publishing.",
+    "expected": []
+  },
+  {
+    "id": "draft-60",
+    "content": "This paragraph explains the ordering process.",
+    "expected": []
+  }
+]

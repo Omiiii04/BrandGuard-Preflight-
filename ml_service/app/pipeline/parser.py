@@ -1,5 +1,4 @@
-"""Deterministic document parsing for uploaded evidence sources."""
-
+"""Deterministic PDF, DOCX, and text parsing with OCR for scanned PDF pages."""
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -14,7 +13,6 @@ from docx import Document
 
 class DocumentParseError(ValueError):
     """Structured error raised when a source cannot be parsed safely."""
-
     def __init__(self, code: str, message: str):
         self.code = code
         super().__init__(f"{code}: {message}")
@@ -23,7 +21,7 @@ class DocumentParseError(ValueError):
 def _result(file_name: str, file_format: str, pages: list[dict[str, Any]]) -> dict[str, Any]:
     text = "\n\n".join(page["text"] for page in pages if page["text"])
     if not text.strip():
-        raise DocumentParseError("NO_EXTRACTABLE_TEXT", f"{file_name} contains no extractable text; OCR is unsupported")
+        raise DocumentParseError("NO_EXTRACTABLE_TEXT", f"{file_name} contains no extractable text, including OCR")
     return {
         "fileName": file_name,
         "format": file_format,
@@ -33,17 +31,38 @@ def _result(file_name: str, file_format: str, pages: list[dict[str, Any]]) -> di
     }
 
 
+def _ocr_page(page: Any, page_number: int) -> str:
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError as error:
+        raise DocumentParseError(
+            "OCR_UNAVAILABLE",
+            "scanned PDF detected but pytesseract/Pillow are not installed; install Tesseract OCR and pytesseract",
+        ) from error
+    try:
+        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
+        image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+        text = pytesseract.image_to_string(image, timeout=15)
+        return text.strip()
+    except Exception as error:
+        raise DocumentParseError(
+            "OCR_FAILED", f"OCR failed on PDF page {page_number}: {type(error).__name__}"
+        ) from error
+
+
 def _parse_pdf(data: bytes, file_name: str) -> dict[str, Any]:
     try:
         document = pymupdf.open(stream=data, filetype="pdf")
     except Exception as error:
         raise DocumentParseError("INVALID_DOCUMENT", f"could not open PDF: {error}") from error
-
     try:
         pages = []
         for number, page in enumerate(document, start=1):
-            text = page.get_text("text") or ""
-            if text.strip():
+            text = (page.get_text("text") or "").strip()
+            if not text:
+                text = _ocr_page(page, number)
+            if text:
                 pages.append({"page": number, "text": text})
     finally:
         document.close()
@@ -55,7 +74,6 @@ def _parse_docx(data: bytes, file_name: str) -> dict[str, Any]:
         document = Document(BytesIO(data))
     except Exception as error:
         raise DocumentParseError("INVALID_DOCUMENT", f"could not open DOCX: {error}") from error
-
     parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
     for table in document.tables:
         for row in table.rows:
@@ -74,10 +92,9 @@ def _parse_text(data: bytes, file_name: str, file_format: str) -> dict[str, Any]
 
 
 def parse_document(data: bytes, file_name: str, mime_type: str | None = None) -> dict[str, Any]:
-    """Parse supported source bytes without OCR or fabricated text."""
+    """Parse supported source bytes and OCR scanned PDF pages without fabricating text."""
     if not isinstance(data, (bytes, bytearray)) or not data:
         raise DocumentParseError("NO_EXTRACTABLE_TEXT", f"{file_name} is empty")
-
     suffix = Path(file_name).suffix.lower()
     if suffix == ".pdf" or mime_type == "application/pdf":
         return _parse_pdf(bytes(data), file_name)

@@ -68,6 +68,8 @@ services:
     build:
       context: ./ml_service
       dockerfile: Dockerfile
+      args:
+        INSTALL_ML_MODELS: ${INSTALL_ML_MODELS:-false}
     container_name: brandguard-ml
     restart: unless-stopped
     ports:
@@ -83,8 +85,23 @@ services:
       - INDEX_DIR=/app/indexes
       - ML_INTERNAL_TOKEN=${ML_INTERNAL_TOKEN:?Set a strong random ML_INTERNAL_TOKEN in .env}
       - DEMO_MODE=${DEMO_MODE:-false}
+      - SEMANTIC_RETRIEVAL_ENABLED=${SEMANTIC_RETRIEVAL_ENABLED:-false}
+      - SENTENCE_TRANSFORMER_MODEL=${SENTENCE_TRANSFORMER_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      - SEMANTIC_MIN_SCORE=${SEMANTIC_MIN_SCORE:-0.25}
+      - NLI_ENABLED=${NLI_ENABLED:-true}
+      - NLI_MODEL_NAME=${NLI_MODEL_NAME:-}
+      - NLI_ENTAILMENT_THRESHOLD=${NLI_ENTAILMENT_THRESHOLD:-0.72}
+      - NLI_CONTRADICTION_THRESHOLD=${NLI_CONTRADICTION_THRESHOLD:-0.72}
+      - NLI_DEVICE=${NLI_DEVICE:-cpu}
+      - SPACY_MODEL=${SPACY_MODEL:-en_core_web_sm}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-12}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.1}
     volumes:
       - faiss_data:/app/indexes
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       mongo:
         condition: service_healthy
@@ -153,6 +170,8 @@ volumes:
     name: brandguard_minio_data
   faiss_data:
     name: brandguard_faiss_data
+  hf_cache:
+    name: brandguard_hf_cache
 
 networks:
   brandguard-net:
