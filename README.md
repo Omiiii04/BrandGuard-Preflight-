@@ -164,6 +164,28 @@ openssl rand -hex 32
 docker compose up --build -d
 ```
 
+On Windows PowerShell, run the repository setup helper instead of manually copying secrets:
+
+```powershell
+.\scripts\setup-env.ps1
+docker compose config --quiet
+docker compose up --build -d
+```
+
+The helper creates `.env` if it is missing, generates strong `ML_INTERNAL_TOKEN` and `JWT_SECRET` values when needed, preserves other settings, and never prints the generated secret values.
+
+#### End-to-end verification
+
+After the stack is healthy and backend dependencies are installed (`npm ci --prefix backend`), run:
+
+```powershell
+node integration_test.js
+docker compose restart ml
+node scripts/verify-ml-persistence.js
+```
+
+The integration test uploads a policy document and reviews a draft. The persistence check confirms that the indexed evidence remains available after the ML service restarts.
+
 #### Running Service Endpoints
 
 | Service | Port | Endpoint URL | Description |
@@ -171,10 +193,10 @@ docker compose up --build -d
 | **Frontend Web** | `3000` | [http://localhost:3000](http://localhost:3000) | React Web Application |
 | **Backend API** | `4000` | [http://localhost:4000](http://localhost:4000) | Express REST API (`/health`, `/v1/*`) |
 | **ML Engine** | `8000` | [http://localhost:8000](http://localhost:8000) | FastAPI ML Service (`/docs`) |
+| **MinIO Console** | `9001` | [http://localhost:9001](http://localhost:9001) | S3-compatible object storage console |
+| **MongoDB** | `27017` | `mongodb://localhost:27017` | Document Database |
 
 The ML Engine binds to loopback (`127.0.0.1:8000`) for local diagnostics and is not published to the LAN. All non-health ML POST endpoints require the backend-to-ML `X-ML-Internal-Token` header; do not expose this service publicly.
-| **MinIO Console** | `9001` | [http://localhost:9001](http://localhost:9001) | S3 Object Store Dashboard (user: `minioadmin` / pass: `minioadmin`) |
-| **MongoDB** | `27017` | `mongodb://localhost:27017` | Document Database |
 
 ---
 
