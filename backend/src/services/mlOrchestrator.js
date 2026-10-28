@@ -34,6 +34,7 @@ const https = require('https');
 const { URL } = require('url');
 
 const { logEventSafe, AUDIT_EVENTS } = require('./auditLogger');
+const Org = require('../models/Org');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -927,8 +928,21 @@ async function rewriteClaim({
       ? claim
       : { text: String(claim || originalText || description || '') };
 
+  // External-model processing is opt-in at the organisation level. Never rely on
+  // a browser-supplied boolean to grant consent to send draft text to a provider.
+  let allowExternalModel = false;
+  if (orgId) {
+    try {
+      const org = await Org.findById(orgId).select('settings.allowExternalModel').lean();
+      allowExternalModel = org?.settings?.allowExternalModel === true;
+    } catch (_error) {
+      allowExternalModel = false;
+    }
+  }
+
   const payload = {
     claim: claimPayload,
+    allowExternalModel,
     rule: rId,
     ruleId: rId,
     originalText: String(originalText || claimPayload.text || description || ''),

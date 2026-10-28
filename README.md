@@ -298,3 +298,38 @@ The entire API contract is documented in [openapi.yaml](file:///c:/Users/jamad/D
 ## 📄 License
 
 This project is licensed under the [MIT License](file:///c:/Users/jamad/Desktop/BrandGuard-Preflight-/LICENSE).
+
+ 
+## Advanced ML capabilities
+
+The FastAPI service includes scanned-PDF OCR, OpenCV image-byte analysis, guarded OpenAI-compatible rewrite/premortem prompts, spaCy entity detection, a DeBERTa-compatible NLI judge, and a FAISS/SentenceTransformers retrieval path. Deterministic fallbacks remain available when a model is unconfigured or unavailable.
+
+### Enable the heavier CPU model stack
+
+Set the following in `.env` before building the ML container:
+
+```dotenv
+INSTALL_ML_MODELS=true
+SEMANTIC_RETRIEVAL_ENABLED=true
+SENTENCE_TRANSFORMER_MODEL=sentence-transformers/all-MiniLM-L6-v2
+NLI_MODEL_NAME=cross-encoder/nli-deberta-v3-base
+NLI_ENABLED=true
+```
+
+Then rebuild the ML service with `docker compose up --build -d ml`. The first semantic/NLI inference may download the configured Hugging Face model; the Hugging Face cache is persisted in the `brandguard_hf_cache` volume. CPU inference is supported; GPU use is not assumed. FAISS index files are rebuildable caches, while source passages remain the canonical persisted content.
+
+### Enable LLM-assisted rewriting and premortems
+
+Point the service at an OpenAI-compatible server such as LM Studio. From Docker Desktop on Windows, the host server is typically reachable as `http://host.docker.internal:1234/v1`. Set `LLM_BASE_URL` and `LLM_MODEL`; set `LLM_API_KEY` only if the endpoint requires one. If these are blank, the service will not make an outbound LLM request. The backend also reads `Org.settings.allowExternalModel`; it sends the explicit permission flag only when that organisation has opted in. Direct internal API callers must provide the corresponding permission flag as well. Model-generated content is a suggestion, not an approval decision. Rewrites are rejected if they remove required `mustSay` language or fail response validation; malformed or failed responses fall back to deterministic behavior.
+
+### Evaluation and confidence calibration
+
+Run the existing five-case regression fixture, then the synthetic 60-draft calibration set:
+
+```bash
+cd ml_service
+PYTHONPATH=. pytest -q
+PYTHONPATH=. python -m evaluation.evaluator --dataset evaluation/drafts_60.json --report reports/evaluation-60-draft.json
+```
+
+The evaluator sweeps 50 confidence cutoffs from 0.50 through 0.99 and reports precision, recall, F1, false positives and false negatives at each cutoff, selecting the best F1 point with precision as a tie-break. The 60 items are synthetic development fixtures, not an independently adjudicated production benchmark. Treat the selected cutoff as a regression/calibration baseline, and re-tune against reviewed real drafts before production use.

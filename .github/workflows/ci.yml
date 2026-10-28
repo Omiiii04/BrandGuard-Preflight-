@@ -29,6 +29,16 @@ jobs:
       - name: Run ML service tests
         working-directory: ml_service
         run: PYTHONPATH=. pytest -q
+      - name: Measure 60-draft evaluation and confidence threshold sweep
+        working-directory: ml_service
+        run: PYTHONPATH=. python -m evaluation.evaluator --dataset evaluation/drafts_60.json --report "$RUNNER_TEMP/evaluation-60-draft.json"
+      - name: Upload evaluation and threshold-tuning report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-60-draft-evaluation
+          path: ${{ runner.temp }}/evaluation-60-draft.json
+          if-no-files-found: ignore
 
   backend:
     name: Backend tests

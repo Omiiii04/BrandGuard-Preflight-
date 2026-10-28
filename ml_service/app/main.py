@@ -20,6 +20,8 @@ from .pipeline.image_checks import analyze_image
 from .pipeline.indexer import PersistentLexicalIndex
 from .pipeline.judge import judge_claim
 from .pipeline.parser import DocumentParseError, parse_document
+from .pipeline.entities import detect_entities as detect_entities_pipeline
+from .pipeline.llm import generate_premortem, generate_rewrite
 
 
 app = FastAPI(
@@ -288,10 +290,34 @@ def rewrite_claim(payload: Dict[str, Any]) -> Dict[str, Any]:
     elif not fix and suggested_rewording:
         fix = suggested_rewording
 
+    evidence = claim.get("evidence", {}) if isinstance(claim, dict) else {}
+    evidence_text = evidence.get("passage", "") if isinstance(evidence, dict) else str(evidence or "")
+    if not evidence_text and isinstance(payload.get("passages"), list):
+        evidence_text = "\n".join(
+            str(item.get("text", "")) for item in payload["passages"]
+            if isinstance(item, dict) and item.get("text")
+        )[:8000]
+    # Never send draft or evidence text to a configured model unless the caller
+    # explicitly confirms this organisation permits external-model processing.
+    llm_fix = None
+    if payload.get("allowExternalModel") is True:
+        llm_fix = generate_rewrite(
+            claim_text=claim_text,
+            verdict=str(verdict),
+            rule_id=str(rule_id) if rule_id else None,
+            original_text=str(payload.get("originalText", claim_text)),
+            intent=payload.get("intent") if isinstance(payload.get("intent"), dict) else {},
+            evidence_text=str(evidence_text),
+        )
+    if llm_fix:
+        fix = llm_fix
+        suggested_rewording = llm_fix
+
     return {
         "suggestedFix": fix or "",
         "suggestedRewording": suggested_rewording or fix or "",
         "meaningCheck": meaning_check(payload.get("originalText", claim_text), fix or "", payload.get("intent")),
+        "generationMethod": "llm" if llm_fix else "deterministic",
     }
 
 
@@ -322,6 +348,10 @@ def premortem_check(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not risk_line and content:
         risk_line = re.split(r"[.!?\n]", content, maxsplit=1)[0].strip()
 
+    llm_premortem = generate_premortem(content, findings, risk_line) if payload.get("allowExternalModel") is True else None
+    if llm_premortem:
+        return llm_premortem
+
     high = bool(re.search(r"\b(best|only|fastest|leading|number one|#1)\b", risk_line, re.I))
     severity = "high" if high else "medium"
     reasons = {
@@ -347,20 +377,8 @@ def image_check(payload: Dict[str, Any]) -> Dict[str, Any]:
 @app.post("/detect-entities", dependencies=[Depends(require_internal_token)])
 def detect_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
     _require_fields(payload, "content", "orgId")
-    content = str(payload.get("content", ""))
+    content = payload.get("content")
+    if not isinstance(content, str):
+        raise HTTPException(status_code=422, detail="content must be a string")
     watchlist = payload.get("watchlist") if isinstance(payload.get("watchlist"), list) else []
-    entities = []
-    for term in watchlist:
-        if not isinstance(term, str) or not term.strip():
-            continue
-        for match in re.finditer(re.escape(term), content, re.IGNORECASE):
-            entities.append(
-                {
-                    "text": match.group(0),
-                    "type": "embargoed",
-                    "isWatchlisted": True,
-                    "span": {"start": match.start(), "end": match.end()},
-                }
-            )
-    entities.sort(key=lambda entity: (entity["span"]["start"], entity["span"]["end"]))
-    return {"entities": entities, "watchlistHits": len(entities)}
+    return detect_entities_pipeline(content, watchlist)
