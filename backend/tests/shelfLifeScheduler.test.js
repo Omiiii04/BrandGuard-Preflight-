@@ -124,6 +124,49 @@ describe('shelfLifeScheduler Service', () => {
     });
   });
 
+  it('leaves a source retryable when ML index expiry synchronization fails', async () => {
+    const source = {
+      _id: new mongoose.Types.ObjectId(),
+      orgId: mockOrgId,
+      owner: mockUserId,
+      fileName: 'retry-expiry-policy.md',
+      expiryDate: new Date('2026-10-25T00:00:00Z'),
+      status: 'ready',
+    };
+    const originalFind = Source.find;
+    const originalUpdateOne = Source.updateOne;
+    const originalUpdateSourceMetadata = mlOrchestrator.updateSourceMetadata;
+    const originalMlServiceUrl = process.env.ML_SERVICE_URL;
+    let databaseUpdates = 0;
+
+    process.env.ML_SERVICE_URL = 'http://ml:8000';
+    Source.find = () => ({ lean: async () => [source] });
+    Source.updateOne = async () => {
+      databaseUpdates += 1;
+      return { modifiedCount: 1 };
+    };
+    mlOrchestrator.updateSourceMetadata = async () => {
+      throw new Error('simulated ML outage');
+    };
+
+    try {
+      const results = await checkExpiringItems({
+        now: new Date('2026-10-27T00:00:00Z'),
+        warningDays: 30,
+      });
+
+      assert.equal(results.expiredCount, 0);
+      assert.equal(databaseUpdates, 0, 'MongoDB status must remain retryable when the index could not be updated');
+      assert.equal(results.details[0].status, 'expiry_sync_failed');
+    } finally {
+      Source.find = originalFind;
+      Source.updateOne = originalUpdateOne;
+      mlOrchestrator.updateSourceMetadata = originalUpdateSourceMetadata;
+      if (originalMlServiceUrl === undefined) delete process.env.ML_SERVICE_URL;
+      else process.env.ML_SERVICE_URL = originalMlServiceUrl;
+    }
+  });
+
   describe('Scheduler lifecycle (start, stop, status)', () => {
     it('manages cron lifecycle properly', () => {
       stopShelfLifeScheduler();
