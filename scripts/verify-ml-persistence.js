@@ -10,10 +10,24 @@
 const assert = require('node:assert/strict');
 const mongoose = require('../backend/node_modules/mongoose');
 const Source = require('../backend/src/models/Source');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const ML_URL = (process.env.ML_URL || 'http://localhost:8000').replace(/\/$/, '');
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/brandguard';
-const ML_INTERNAL_TOKEN = process.env.ML_INTERNAL_TOKEN || '';
+
+function readMlInternalToken() {
+  if (process.env.ML_INTERNAL_TOKEN) return process.env.ML_INTERNAL_TOKEN;
+  try {
+    const envText = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
+    const match = envText.match(/^\s*ML_INTERNAL_TOKEN\s*=\s*(.*?)\s*$/m);
+    return match ? match[1].split('#')[0].trim().replace(/^(['"])(.*)\1$/, '$2').trim() : '';
+  } catch (_error) {
+    return '';
+  }
+}
+
+const ML_INTERNAL_TOKEN = readMlInternalToken();
 
 async function main() {
   if (!ML_INTERNAL_TOKEN || ML_INTERNAL_TOKEN.length < 32) {
