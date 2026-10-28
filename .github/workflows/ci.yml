@@ -96,15 +96,20 @@ jobs:
       - name: Generate ephemeral CI secrets
         shell: bash
         run: |
-          echo "ML_INTERNAL_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "JWT_SECRET=$(openssl rand -hex 64)" >> "$GITHUB_ENV"
-          echo "DEMO_MODE=false" >> "$GITHUB_ENV"
+          ML_INTERNAL_TOKEN="$(openssl rand -hex 32)"
+          JWT_SECRET="$(openssl rand -hex 64)"
+          printf 'ML_INTERNAL_TOKEN=%s\nJWT_SECRET=%s\nDEMO_MODE=false\n' "$ML_INTERNAL_TOKEN" "$JWT_SECRET" > .env
+          {
+            echo "ML_INTERNAL_TOKEN=$ML_INTERNAL_TOKEN"
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "DEMO_MODE=false"
+          } >> "$GITHUB_ENV"
       - name: Build and wait for all Compose services
         run: docker compose up --build -d --wait --wait-timeout 300
       - name: Run full upload-to-review integration test
         env:
           MONGODB_URI: mongodb://localhost:27017/brandguard
-        run: node integration_test.js
+        run: env -u ML_INTERNAL_TOKEN -u JWT_SECRET node integration_test.js
       - name: Restart ML service and wait for health
         shell: bash
         run: |
@@ -123,7 +128,7 @@ jobs:
       - name: Verify indexed document survived ML restart
         env:
           MONGODB_URI: mongodb://localhost:27017/brandguard
-        run: node scripts/verify-ml-persistence.js
+        run: env -u ML_INTERNAL_TOKEN -u JWT_SECRET node scripts/verify-ml-persistence.js
       - name: Capture Compose logs on failure
         if: failure()
         run: docker compose logs --no-color > compose-integration.log || true
