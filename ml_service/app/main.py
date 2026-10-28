@@ -2,11 +2,12 @@
 
 import base64
 import hashlib
+import hmac
 import os
 import re
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .pipeline.claims import (
@@ -68,6 +69,20 @@ INDEX = PersistentLexicalIndex(os.getenv("INDEX_DIR", "indexes"))
 
 def _demo_enabled() -> bool:
     return os.getenv("DEMO_MODE", "false").lower() == "true"
+
+
+def _validate_internal_token(internal_token: Optional[str]) -> None:
+    expected_token = os.getenv("ML_INTERNAL_TOKEN", "")
+    if not expected_token or expected_token == "brandguard-ml-internal-dev-token" or len(expected_token) < 32:
+        raise HTTPException(status_code=503, detail="ML_INTERNAL_TOKEN must be configured with a strong random value")
+    if not internal_token or not hmac.compare_digest(internal_token.encode('utf-8'), expected_token.encode('utf-8')):
+        raise HTTPException(status_code=401, detail="Invalid internal service token")
+
+
+def require_internal_token(
+    internal_token: Optional[str] = Header(default=None, alias="X-ML-Internal-Token"),
+) -> None:
+    _validate_internal_token(internal_token)
 
 
 def _passages_for_request(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -132,11 +147,7 @@ def root() -> Dict[str, Any]:
 
 @app.post("/index-source")
 def index_source(payload: Dict[str, Any], internal_token: Optional[str] = Header(default=None, alias="X-ML-Internal-Token")) -> Dict[str, Any]:
-    expected_token = os.getenv("ML_INTERNAL_TOKEN", "")
-    if not expected_token:
-        raise HTTPException(status_code=503, detail="ML_INTERNAL_TOKEN is not configured")
-    if internal_token != expected_token:
-        raise HTTPException(status_code=401, detail="Invalid internal service token")
+    _validate_internal_token(internal_token)
     _require_fields(payload, "sourceId", "orgId", "fileName", "contentBase64")
     try:
         content = base64.b64decode(payload["contentBase64"], validate=True)
@@ -167,7 +178,34 @@ def index_source(payload: Dict[str, Any], internal_token: Optional[str] = Header
     }
 
 
-@app.post("/extract-claims")
+@app.post("/source-metadata", dependencies=[Depends(require_internal_token)])
+def update_source_metadata(payload: Dict[str, Any]) -> Dict[str, Any]:
+    _require_fields(payload, "sourceId", "orgId")
+    source_id = str(payload["sourceId"])
+    org_id = str(payload["orgId"])
+    updates: Dict[str, Any] = {}
+    if "status" in payload:
+        allowed_statuses = {"active", "ready", "processing", "expired", "superseded", "error"}
+        status = str(payload["status"]).lower()
+        if status not in allowed_statuses:
+            raise HTTPException(status_code=422, detail="Invalid source status")
+        updates["status"] = status
+    if "expiryDate" in payload:
+        expiry = payload["expiryDate"]
+        if expiry is not None and not isinstance(expiry, str):
+            raise HTTPException(status_code=422, detail="expiryDate must be an ISO date string or null")
+        updates["expiryDate"] = expiry
+    if "ownerName" in payload:
+        updates["ownerName"] = str(payload.get("ownerName") or "")
+    if "version" in payload:
+        updates["version"] = str(payload.get("version") or "1.0")
+    if not updates:
+        raise HTTPException(status_code=422, detail="At least one metadata field is required")
+    updated_passages = INDEX.update_source_metadata(org_id, source_id, updates)
+    return {"updated": updated_passages > 0, "sourceId": source_id, "orgId": org_id, "passageCount": updated_passages}
+
+
+@app.post("/extract-claims", dependencies=[Depends(require_internal_token)])
 def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
     _require_fields(payload, "content")
     if not isinstance(payload["content"], str):
@@ -191,7 +229,7 @@ def extract_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"claims": claims}
 
 
-@app.post("/match")
+@app.post("/match", dependencies=[Depends(require_internal_token)])
 def match_passages(payload: Dict[str, Any]) -> Dict[str, Any]:
     passages = _passages_for_request(payload)
     source_claims = payload.get("claims")
@@ -232,7 +270,7 @@ RULE_REWORDINGS: Dict[str, str] = {
 }
 
 
-@app.post("/rewrite")
+@app.post("/rewrite", dependencies=[Depends(require_internal_token)])
 def rewrite_claim(payload: Dict[str, Any]) -> Dict[str, Any]:
     rule_id = payload.get("rule") or payload.get("ruleId")
     if not rule_id and isinstance(payload.get("claim"), dict):
@@ -257,7 +295,7 @@ def rewrite_claim(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@app.post("/premortem")
+@app.post("/premortem", dependencies=[Depends(require_internal_token)])
 def premortem_check(payload: Dict[str, Any]) -> Dict[str, Any]:
     _require_fields(payload, "content", "findings")
     if not isinstance(payload["content"], str) or not isinstance(payload["findings"], list):
@@ -299,14 +337,14 @@ def premortem_check(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"risks": risks, "highestRiskLine": risk_line}
 
 
-@app.post("/image-check")
+@app.post("/image-check", dependencies=[Depends(require_internal_token)])
 def image_check(payload: Dict[str, Any]) -> Dict[str, Any]:
     _require_fields(payload, "storageRef", "orgId")
     results = analyze_image(payload)
     return {"results": results, "message": "No image metadata provided." if not results else None}
 
 
-@app.post("/detect-entities")
+@app.post("/detect-entities", dependencies=[Depends(require_internal_token)])
 def detect_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
     _require_fields(payload, "content", "orgId")
     content = str(payload.get("content", ""))

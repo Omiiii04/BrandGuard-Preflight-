@@ -201,3 +201,33 @@ def test_evaluation_runner_reports_measured_metrics():
     assert metrics["falseNegatives"] == 0
     assert metrics["precision"] == 1.0
     assert metrics["recall"] == 1.0
+
+
+def test_iso_timestamp_expiry_returns_outdated_in_compatibility_retrieval():
+    claims = extract_claims(
+        {
+            "content": "Customers may return eligible items within 30 days of delivery.",
+            "passages": [
+                {
+                    "passageId": "expired-iso-source",
+                    "expiryDate": "2020-01-01T00:00:00.000Z",
+                    "text": "Customers may return eligible items within 30 days of delivery.",
+                }
+            ],
+        }
+    )["claims"]
+
+    duration_claim = next(claim for claim in claims if "30 days" in claim["text"])
+    assert duration_claim["verdict"] == "Outdated"
+    assert duration_claim["proofPassageId"] == "expired-iso-source"
+
+
+def test_invalid_expiry_metadata_is_excluded_from_retrieval():
+    from app.pipeline.retriever import retrieve_passage
+
+    passage = {
+        "passageId": "invalid-expiry",
+        "expiryDate": "not-a-date",
+        "text": "Customers may return eligible items within 30 days of delivery.",
+    }
+    assert retrieve_passage("return 30 days", [passage]) is None

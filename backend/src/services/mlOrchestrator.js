@@ -24,7 +24,7 @@
  *   - Only redactedContent (never raw content) is forwarded.
  *   - ML_SERVICE_URL is an internal Docker / process env variable and is never
  *     exposed to the browser.
- *   - No auth headers are added; the ML service is inside the private network.
+ *   - Every backend-to-ML request carries X-ML-Internal-Token.
  */
 
 'use strict';
@@ -730,6 +730,35 @@ async function indexSource({
   return rawResponse;
 }
 
+/** Sync mutable lifecycle metadata with the ML passage index. */
+async function updateSourceMetadata({
+  sourceId,
+  orgId,
+  status,
+  expiryDate,
+  ownerName,
+  version,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}) {
+  const mlBaseUrl = (process.env.ML_SERVICE_URL || '').replace(/\/$/, '');
+  if (!mlBaseUrl) {
+    throw Object.assign(new Error('ML_SERVICE_URL environment variable is not configured.'), {
+      code: 'ML_URL_NOT_CONFIGURED',
+    });
+  }
+  const payload = { sourceId: String(sourceId), orgId: String(orgId) };
+  if (status !== undefined) payload.status = status;
+  if (expiryDate !== undefined) payload.expiryDate = expiryDate ? new Date(expiryDate).toISOString() : null;
+  if (ownerName !== undefined) payload.ownerName = String(ownerName || '');
+  if (version !== undefined) payload.version = String(version || '1.0');
+  return postJson(
+    `${mlBaseUrl}/source-metadata`,
+    payload,
+    timeoutMs,
+    { 'X-ML-Internal-Token': process.env.ML_INTERNAL_TOKEN || '' }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Exact-rule extraction (deterministic, zero external calls)
 // ---------------------------------------------------------------------------
@@ -913,7 +942,7 @@ async function rewriteClaim({
   };
 
   try {
-    const rawResponse = await postJson(targetUrl, payload, timeoutMs);
+    const rawResponse = await postJson(targetUrl, payload, timeoutMs, { 'X-ML-Internal-Token': process.env.ML_INTERNAL_TOKEN || '' });
     const suggestedFix = rawResponse?.suggestedFix || '';
     const suggestedRewording =
       rawResponse?.suggestedRewording ||
@@ -1026,7 +1055,7 @@ async function extractClaims({
   // ── 2. HTTP POST with timeout ──────────────────────────────────────────────
   let rawResponse;
   try {
-    rawResponse = await postJson(targetUrl, payload, timeoutMs);
+    rawResponse = await postJson(targetUrl, payload, timeoutMs, { 'X-ML-Internal-Token': process.env.ML_INTERNAL_TOKEN || '' });
   } catch (httpErr) {
     console.error(`[mlOrchestrator] HTTP call failed [${httpErr.code}]: ${httpErr.message}`);
 
@@ -1089,6 +1118,7 @@ async function extractClaims({
 module.exports = {
   // Core orchestration
   indexSource,
+  updateSourceMetadata,
   extractClaims,
   rewriteClaim,
   extractExactRuleFindings,
