@@ -157,10 +157,11 @@ cd BrandGuard-Preflight-
 # 2. Configure environment
 cp .env.example .env
 
-# 3. Generate a unique shared secret (paste the output into ML_INTERNAL_TOKEN in .env)
-openssl rand -hex 32
+# 3. Generate strong secrets and paste each result into .env
+openssl rand -hex 32  # ML_INTERNAL_TOKEN
+openssl rand -hex 64  # JWT_SECRET
 
-# 4. Launch all containers (Compose intentionally refuses an empty ML_INTERNAL_TOKEN)
+# 4. Launch all containers (Compose refuses empty secrets)
 docker compose up --build -d
 ```
 
