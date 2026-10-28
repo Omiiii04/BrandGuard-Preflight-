@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 
 const Source = require('../src/models/Source');
+const mlOrchestrator = require('../src/services/mlOrchestrator');
 const {
   checkExpiringItems,
   startShelfLifeScheduler,
@@ -47,10 +48,21 @@ describe('shelfLifeScheduler Service', () => {
       const originalFind = Source.find;
       const originalUpdateOne = Source.updateOne;
       const originalAuditSave = AuditLog.prototype.save;
+      const originalUpdateSourceMetadata = mlOrchestrator.updateSourceMetadata;
+      const originalMlServiceUrl = process.env.ML_SERVICE_URL;
 
       let updatedId = null;
       let updatedStatus = null;
       const savedAuditEvents = [];
+      const syncOrder = [];
+      const metadataUpdates = [];
+
+      process.env.ML_SERVICE_URL = 'http://ml:8000';
+      mlOrchestrator.updateSourceMetadata = async (payload) => {
+        metadataUpdates.push(payload);
+        syncOrder.push('ml-index');
+        return { updated: true, sourceId: String(payload.sourceId), orgId: String(payload.orgId), passageCount: 1 };
+      };
 
       AuditLog.prototype.save = async function () {
         savedAuditEvents.push(this.toObject());
@@ -69,6 +81,7 @@ describe('shelfLifeScheduler Service', () => {
 
         updatedId = filter._id;
         updatedStatus = update.$set.status;
+        syncOrder.push('mongo');
         return { modifiedCount: 1 };
       };
 
@@ -91,6 +104,9 @@ describe('shelfLifeScheduler Service', () => {
         assert.equal(expiredItem.fileName, 'old_contract.docx');
         assert.deepEqual(updatedId, expiredSource._id);
         assert.equal(updatedStatus, 'expired');
+        assert.equal(metadataUpdates.length, 1);
+        assert.equal(metadataUpdates[0].status, 'expired');
+        assert.deepEqual(syncOrder, ['ml-index', 'mongo'], 'ML index must be deactivated before the DB status changes');
 
         // Verify AuditLog events recorded
         assert.equal(savedAuditEvents.length, 2);
@@ -100,6 +116,9 @@ describe('shelfLifeScheduler Service', () => {
         Source.find = originalFind;
         Source.updateOne = originalUpdateOne;
         AuditLog.prototype.save = originalAuditSave;
+        mlOrchestrator.updateSourceMetadata = originalUpdateSourceMetadata;
+        if (originalMlServiceUrl === undefined) delete process.env.ML_SERVICE_URL;
+        else process.env.ML_SERVICE_URL = originalMlServiceUrl;
       }
 
     });
