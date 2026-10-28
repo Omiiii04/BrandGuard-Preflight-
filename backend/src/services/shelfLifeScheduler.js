@@ -16,6 +16,7 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const Source = require('../models/Source');
 const { logEventSafe, AUDIT_EVENTS } = require('./auditLogger');
+const mlOrchestrator = require('./mlOrchestrator');
 
 let cronTask = null;
 let lastRunTimestamp = null;
@@ -52,9 +53,36 @@ async function checkExpiringItems({ now = new Date(), warningDays = 30 } = {}) {
       const isExpired = expiry <= currentDate;
 
       if (isExpired) {
-        // Transition status to expired in database
+        // Update the ML index first so expired passages become ineligible before
+        // MongoDB records the terminal status. If the index is unavailable, leave
+        // the source status unchanged so the next scheduler run can retry. The
+        // retriever still treats date-expired passages as Outdated, never current.
+        if (process.env.ML_SERVICE_URL) {
+          try {
+            await mlOrchestrator.updateSourceMetadata({
+              sourceId: source._id,
+              orgId: source.orgId,
+              status: 'expired',
+              expiryDate: source.expiryDate,
+              ownerName: source.ownerName,
+              version: source.version,
+            });
+          } catch (syncErr) {
+            console.error('[shelfLifeScheduler] Could not synchronize expiry to ML index:', syncErr.message);
+            results.details.push({
+              id: source._id,
+              type: 'source',
+              fileName: source.fileName,
+              status: 'expiry_sync_failed',
+              expiryDate: source.expiryDate,
+            });
+            continue;
+          }
+        }
+
+        // Only transition the database after the ML index has been updated.
         await Source.updateOne(
-          { _id: source._id },
+          { _id: source._id, orgId: source.orgId },
           { $set: { status: 'expired' } }
         );
 
