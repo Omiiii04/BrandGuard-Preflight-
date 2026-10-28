@@ -133,3 +133,29 @@ jobs:
       - name: Stop Compose stack
         if: always()
         run: docker compose down
+
+  windows-environment-setup:
+    name: Windows PowerShell environment setup
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate local secrets safely and verify idempotence
+        shell: pwsh
+        run: |
+          & .\scripts\setup-env.ps1
+          $lines = Get-Content .env
+          $mlLine = $lines | Where-Object { $_ -match '^ML_INTERNAL_TOKEN=' } | Select-Object -Last 1
+          $jwtLine = $lines | Where-Object { $_ -match '^JWT_SECRET=' } | Select-Object -Last 1
+          if (-not $mlLine -or -not $jwtLine) { throw 'Required environment keys are missing.' }
+          $mlToken = ($mlLine -split '=', 2)[1]
+          $jwtSecret = ($jwtLine -split '=', 2)[1]
+          if ($mlToken.Length -lt 64) { throw 'ML_INTERNAL_TOKEN is not strong enough.' }
+          if ($jwtSecret.Length -lt 128) { throw 'JWT_SECRET is not strong enough.' }
+          if (-not (git check-ignore .env)) { throw '.env must be ignored by git.' }
+          $output = (& .\scripts\setup-env.ps1 2>&1 | Out-String)
+          if ($output.Contains($mlToken) -or $output.Contains($jwtSecret)) { throw 'The setup helper printed a secret value.' }
+          $after = Get-Content .env
+          $mlAfter = (($after | Where-Object { $_ -match '^ML_INTERNAL_TOKEN=' } | Select-Object -Last 1) -split '=', 2)[1]
+          $jwtAfter = (($after | Where-Object { $_ -match '^JWT_SECRET=' } | Select-Object -Last 1) -split '=', 2)[1]
+          if ($mlAfter -ne $mlToken -or $jwtAfter -ne $jwtSecret) { throw 'The setup helper rotated an existing strong secret unexpectedly.' }
+          Write-Host 'PASS: secrets are strong, kept out of output, preserved on rerun, and .env is git-ignored.'
