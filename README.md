@@ -175,17 +175,15 @@ docker compose up --build -d
 
 The helper creates `.env` if it is missing, generates strong `ML_INTERNAL_TOKEN` and `JWT_SECRET` values when needed, preserves other settings, and never prints the generated secret values.
 
-#### End-to-end verification
+#### End-to-end verification (Windows)
 
-After the stack is healthy and backend dependencies are installed (`npm ci --prefix backend`), run:
+Run this single command from the repository root:
 
 ```powershell
-node integration_test.js
-docker compose restart ml
-node scripts/verify-ml-persistence.js
+.\scripts\verify-local.ps1
 ```
 
-The integration test uploads a policy document and reviews a draft. The persistence check confirms that the indexed evidence remains available after the ML service restarts.
+It creates or repairs local secrets without printing them, installs the backend test dependencies if needed, builds and starts the stack, runs the source-upload/draft-review integration test, restarts the ML service, and verifies that indexed evidence is still available afterward. It leaves the services running and does not delete Docker volumes. If verification fails, it saves Compose logs under your Windows temporary directory.
 
 #### Running Service Endpoints
 
