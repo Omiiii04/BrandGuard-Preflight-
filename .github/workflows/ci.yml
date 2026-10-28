@@ -162,6 +162,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'integration_test.js has a syntax error.' }
           node --check scripts/verify-ml-persistence.js
           if ($LASTEXITCODE -ne 0) { throw 'verify-ml-persistence.js has a syntax error.' }
+      - name: Exercise local verification orchestration with mocked services
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path 'backend/node_modules/mongoose' -Force | Out-Null
+          $global:mockCommands = [System.Collections.Generic.List[string]]::new()
+          function global:docker { $global:mockCommands.Add("docker $($args -join ' ')"); $global:LASTEXITCODE = 0 }
+          function global:node { $global:mockCommands.Add("node $($args -join ' ')"); $global:LASTEXITCODE = 0 }
+          function global:Invoke-RestMethod { param([string]$Uri, [int]$TimeoutSec); $global:mockCommands.Add("health $Uri"); return @{ status = 'healthy' } }
+          & .\scripts\verify-local.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Local verification script did not complete its mocked command path.' }
+          if (-not ($global:mockCommands -contains 'node integration_test.js')) { throw 'Integration test invocation is missing.' }
+          if (-not ($global:mockCommands -contains 'node scripts/verify-ml-persistence.js')) { throw 'Persistence verification invocation is missing.' }
+          if (-not ($global:mockCommands -contains 'docker compose up --build -d --wait --wait-timeout 300')) { throw 'Compose startup invocation is missing.' }
+          Write-Host 'PASS: local verification orchestration reaches integration and persistence checks.'
       - name: Generate local secrets safely and verify idempotence
         shell: pwsh
         run: |
